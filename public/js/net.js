@@ -85,14 +85,14 @@ const sendPiece = (url, blob, onProgress) => new Promise((resolve, reject) => {
   xhr.send(blob);
 });
 
-async function uploadInPieces(file, onProgress) {
+async function uploadInPieces(file, onProgress, area) {
   const call = async (url, init) => {
     const res = await fetch(url, init).catch(() => { throw new Error("The upload was interrupted. Check the connection and try again."); });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || "The upload failed.");
     return body;
   };
-  const start = await call(`/api/host/upload/start?name=${encodeURIComponent(file.name)}&size=${file.size}`, { method: "POST" });
+  const start = await call(`/api/host/upload/start?name=${encodeURIComponent(file.name)}&size=${file.size}${area ? `&area=${area}` : ""}`, { method: "POST" });
   const parts = [];
   for (let offset = 0, n = 1; offset < file.size; offset += start.chunkBytes, n++) {
     const blob = file.slice(offset, offset + start.chunkBytes);
@@ -106,11 +106,12 @@ async function uploadInPieces(file, onProgress) {
 }
 
 // Upload with progress. Goes to the show server's storage, not into browser storage.
-export function upload(file, onProgress) {
-  if (chunkBytes) return uploadInPieces(file, onProgress);
+// `area` is "sounds" for show sounds; question media goes with the active set of questions.
+export function upload(file, onProgress, area = "") {
+  if (chunkBytes) return uploadInPieces(file, onProgress, area);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", `/api/host/upload?name=${encodeURIComponent(file.name)}`);
+    xhr.open("PUT", `/api/host/upload?name=${encodeURIComponent(file.name)}${area ? `&area=${area}` : ""}`);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
     xhr.onload = () => {
       let body = {};

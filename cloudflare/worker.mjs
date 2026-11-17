@@ -5,12 +5,12 @@
 //   upload pieces -> straight into R2
 import { createAuth } from "../server/auth.mjs";
 import { mediaKind } from "../shared/schema.mjs";
-import { MIME } from "../server/media-types.mjs";
+import { MIME, AREAS } from "../server/media-types.mjs";
 import { ShowRoom, json, plain, passwordProblem, maxUpload } from "./room.mjs";
 
 export { ShowRoom };
 
-const KEY = /^(live|demo)\/[0-9a-f]{20}\.[a-z0-9]{2,5}$/;
+const KEY = /^(live|demo|sounds)\/[0-9a-f]{20}\.[a-z0-9]{2,5}$/;
 const SECURITY = { "x-content-type-options": "nosniff", "x-frame-options": "SAMEORIGIN", "referrer-policy": "no-referrer" };
 const secured = (res) => {
   const out = new Response(res.body, res);
@@ -21,7 +21,7 @@ const secured = (res) => {
 async function media(request, env, url) {
   if (!["GET", "HEAD"].includes(request.method)) return json({ error: "Method not allowed" }, 405);
   const [, , ws, file] = decodeURIComponent(url.pathname).split("/");
-  if (!["live", "demo"].includes(ws) || !file || file.includes("..")) return json({ error: "Not found" }, 404);
+  if (!AREAS.includes(ws) || !file || file.includes("..")) return json({ error: "Not found" }, 404);
   const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
   const headers = new Headers({ "content-type": MIME[ext] || "application/octet-stream", "accept-ranges": "bytes", "cache-control": "private, max-age=86400, immutable" });
   if (ext === ".svg") headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'");

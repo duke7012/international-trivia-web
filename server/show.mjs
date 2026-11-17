@@ -4,7 +4,7 @@
 import { projectorView, hostView } from "./views.mjs";
 import { WORKSPACES, newId } from "./bank.mjs";
 import { reduce, due, ShowError, ACTIONS, PREVIEW_SAFE_PHASES, idleMedia, mediaReduce } from "../shared/engine.mjs";
-import { TOTAL_STOPS, emptyQuestion, normalizeQuestion, isBlank, publishErrors, normalizeSettings, normalizeRescue } from "../shared/schema.mjs";
+import { TOTAL_STOPS, emptyQuestion, normalizeQuestion, isBlank, publishErrors, normalizeSettings, normalizeRescue, normalizeSounds } from "../shared/schema.mjs";
 
 const ROSTER_ONLY = ["addContestants", "renameContestant", "removeContestant", "setContestantStatus"];
 const fail = (msg) => { throw new ShowError(msg); };
@@ -15,7 +15,7 @@ const fail = (msg) => { throw new ShowError(msg); };
 export function createShow({ store, screens, extras = {}, now = () => Date.now(), random = Math.random }) {
   let preview = null; // a rehearsal overlay on the projector; never part of the saved show
 
-  const ctxFor = (ws) => ({ now: now(), questions: ws.questions, settings: ws.settings, rescue: ws.rescue, random, id: newId });
+  const ctxFor = (ws) => ({ now: now(), questions: ws.questions, settings: ws.settings, rescue: ws.rescue, sounds: store.app.sounds || {}, random, id: newId });
   function applyShowAction(type, payload) {
     const ws = store.current;
     const next = reduce(ws.session, { type, payload }, ctxFor(ws));
@@ -64,6 +64,8 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       store.save(ws, "questions");
     },
     "rescue.save"(ws, { rescue }) { ws.rescue = normalizeRescue(rescue, newId); store.save(ws, "rescue"); },
+    // The host's own sound files, shared by the live show and the demo set.
+    "sounds.save"(_, { sounds }) { store.app.sounds = normalizeSounds(sounds); store.saveApp(); store.sweepSounds(store.app.sounds); },
     "settings.save"(ws, { settings }) { ws.settings = normalizeSettings({ ...ws.settings, ...settings }); store.save(ws, "settings"); },
     "workspace.set"(_, { name }) {
       if (!WORKSPACES.includes(name)) fail("Unknown workspace.");
@@ -141,8 +143,8 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
 
     viewFor(role) {
       const ws = store.current;
-      if (role === "projector") return projectorView(ws, preview, now());
-      return hostView(ws, { projector: screens(), preview: preview && { kind: preview.kind, number: preview.number, media: preview.media, presentation: preview.question?.presentation }, ...extras }, now());
+      if (role === "projector") return projectorView(ws, preview, now(), store.app.sounds || {});
+      return hostView(ws, { sounds: store.app.sounds || {}, projector: screens(), preview: preview && { kind: preview.kind, number: preview.number, media: preview.media, presentation: preview.question?.presentation }, ...extras }, now());
     },
   };
 }

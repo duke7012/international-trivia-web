@@ -1,8 +1,9 @@
 // Rescue tab (clues and rules, stored apart from the question bank) and Settings tab.
 // Both are re-created when the host switches between the live show and the demo set, so each
 // starts from that set's saved values.
-import { html, useState } from "/vendor/preact/htm-preact.module.js";
-import { EMERGENCY_RULES, clueReady } from "/shared/schema.mjs";
+import { html, useRef, useState } from "/vendor/preact/htm-preact.module.js";
+import { upload } from "../net.js";
+import { EMERGENCY_RULES, clueReady, SOUND_CUES, cueForFile } from "/shared/schema.mjs";
 import { run, say, Field, MediaPicker } from "./ui.js";
 
 const RULE_LABEL = { all: "Everyone returns", half: "Half return, rounded up", upTo: "Up to a number return", none: "Nobody returns (host uses the emergency rule)" };
@@ -63,6 +64,77 @@ export function RescueTab({ view }) {
   </div>`;
 }
 
+// How long a sound file runs, read by the browser. The show uses this for the two lead-ins.
+const durationOf = (src) => new Promise((resolve) => {
+  const a = new Audio();
+  a.preload = "metadata";
+  a.onloadedmetadata = () => resolve(Number.isFinite(a.duration) ? Math.round(a.duration * 1000) : 0);
+  a.onerror = () => resolve(0);
+  a.src = src;
+});
+const seconds = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s` : `${(ms / 1000).toFixed(1)} s`);
+
+// Show sounds: the host's own audio for each moment. Shared by the live show and the demo set.
+function SoundsPanel({ view }) {
+  const sounds = view.sounds || {};
+  const [busy, setBusy] = useState("");
+  const [playing, setPlaying] = useState(null);
+  const audio = useRef(null);
+  const count = SOUND_CUES.filter((c) => sounds[c.id]).length;
+
+  const add = async (files, forcedId) => {
+    const next = { ...sounds }, skipped = [];
+    for (const file of files) {
+      const id = forcedId || cueForFile(file.name);
+      if (!id) { skipped.push(file.name); continue; }
+      setBusy(`Adding ${file.name}`);
+      try {
+        const up = await upload(file, null, "sounds");
+        next[id] = { src: up.src, name: file.name, durationMs: await durationOf(up.src) };
+      } catch (e) { say(`${file.name}: ${e.message}`, "error"); }
+    }
+    setBusy("");
+    if (await run("sounds.save", { sounds: next })) {
+      if (skipped.length) say(`Not sure where these belong, so they were left out: ${skipped.join(", ")}. Add each one with the button next to its moment.`, "error");
+      else say("Show sounds updated.", "ok");
+    }
+  };
+  const remove = (id) => { const next = { ...sounds }; delete next[id]; run("sounds.save", { sounds: next }); };
+  const toggle = (id) => {
+    audio.current?.pause();
+    if (playing === id) { setPlaying(null); return; }
+    const a = new Audio(sounds[id].src);
+    a.onended = () => setPlaying(null);
+    audio.current = a; setPlaying(id);
+    a.play().catch(() => setPlaying(null));
+  };
+  const pick = (id) => (e) => { const files = [...e.target.files]; e.target.value = ""; if (files.length) add(files, id); };
+
+  return html`<section class="panel" data-testid="sounds-panel">
+    <header class="panel-head"><h2>Show sounds</h2><span class="muted" data-testid="sounds-count">${count} of ${SOUND_CUES.length} moments use your own sound</span></header>
+    <p class="muted">Use your own audio for each moment of the show. Add all your files at once and each one is matched to its moment by its file name. A moment with no file uses the built-in sound. These sounds are shared by the live show and the demo rehearsal.</p>
+    <div class="row">
+      <label class="btn primary" data-testid="sounds-add">Add sound files<input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" multiple hidden onChange=${pick(null)} data-testid="sounds-input" /></label>
+      ${busy && html`<span class="muted" role="status">${busy}…</span>`}
+    </div>
+    <ul class="sound-list">
+      ${SOUND_CUES.map((c) => {
+        const s = sounds[c.id];
+        return html`<li class=${s ? "has" : ""} data-testid=${`sound-${c.id}`} data-set=${s ? "yes" : "no"}>
+          <div class="sound-what"><b>${c.label}</b><span class="muted">${c.when}</span></div>
+          <div class="sound-file">${s ? html`<span data-testid=${`sound-name-${c.id}`}>${s.name}</span><span class="muted">${s.durationMs ? seconds(s.durationMs) : "length unknown"}</span>` : html`<span class="muted">Built-in sound</span>`}</div>
+          <div class="row">
+            ${s && html`<button type="button" class="btn small ${playing === c.id ? "on" : ""}" onClick=${() => toggle(c.id)}>${playing === c.id ? "Stop" : "Listen"}</button>`}
+            <label class="btn ghost small">${s ? "Replace" : "Choose file"}<input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac" hidden onChange=${pick(c.id)} data-testid=${`sound-input-${c.id}`} /></label>
+            ${s && html`<button type="button" class="btn ghost small danger" onClick=${() => remove(c.id)} data-testid=${`sound-remove-${c.id}`}>Remove</button>`}
+          </div>
+        </li>`;
+      })}
+    </ul>
+    <p class="field-hint">With a timer lead-in, pressing Start timer plays it first and the countdown begins when it ends. With an answer lead-in, pressing Reveal answer plays it first and the answer appears when it ends. While a question's own video or audio clip plays, the question music pauses.</p>
+  </section>`;
+}
+
 export function SettingsTab({ view }) {
   const [st, setSt] = useState(() => ({ ...view.settings }));
   const [dirty, setDirty] = useState(false);
@@ -77,11 +149,13 @@ export function SettingsTab({ view }) {
         <${Field} label="Show title"><input type="text" value=${st.showTitle} onInput=${(e) => set({ showTitle: e.target.value })} /><//>
         <${Field} label="Default countdown (seconds)"><input type="number" min="3" max="300" value=${st.defaultCountdown} onInput=${(e) => set({ defaultCountdown: e.target.value })} data-testid="set-countdown" /><//>
         <${Field} label="Flight length (seconds)" hint="You can always skip a flight"><input type="number" min="2" max="30" step="0.5" value=${st.flightSeconds} onInput=${(e) => set({ flightSeconds: e.target.value })} data-testid="set-flight" /><//>
-        <${Field} label="Timer sound"><select value=${st.timerSound} onChange=${(e) => set({ timerSound: e.target.value })}><option value="ticks">Ticks, then a bell</option><option value="pulse">Soft pulses, then a bell</option><option value="off">No timer sound</option></select><//>
+        <${Field} label="Built-in timer sound" hint="Used when you have not added your own countdown sound"><select value=${st.timerSound} onChange=${(e) => set({ timerSound: e.target.value })}><option value="ticks">Ticks, then a bell</option><option value="pulse">Soft pulses, then a bell</option><option value="off">No timer sound</option></select><//>
         <${Field} label=${`Projector volume ${Math.round(st.volume * 100)}%`}><input type="range" min="0" max="1" step="0.05" value=${st.volume} onInput=${(e) => set({ volume: Number(e.target.value) })} /><//>
         <label class="check"><input type="checkbox" checked=${st.showNames} onChange=${(e) => set({ showNames: e.target.checked })} /> Show contestant names on the projector</label>
       </div>
     </section>
+
+    <${SoundsPanel} view=${view} />
 
     <section class="panel">
       <header class="panel-head"><h2>Topic choice and difficulty</h2></header>

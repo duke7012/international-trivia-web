@@ -2,7 +2,7 @@
 // editor's built-in preview on the host dashboard, so a preview is the real thing, not a mock-up.
 import { html, useEffect, useLayoutEffect, useRef, useState } from "/vendor/preact/htm-preact.module.js";
 import { clock } from "./net.js";
-import { mediaPosition } from "/shared/engine.mjs";
+import { mediaPosition, timerRemaining } from "/shared/engine.mjs";
 
 const LETTERS = ["A", "B", "C", "D"];
 
@@ -35,7 +35,7 @@ export function useRemaining(timer) {
   }, [timer?.running, timer?.deadline]);
   if (!timer) return null;
   if (timer.idle) return timer.durationMs;
-  return timer.running ? Math.max(0, timer.deadline - clock.now()) : timer.remainingMs;
+  return timerRemaining(timer, clock.now());
 }
 
 export function TimerDial({ timer, phase, onSecond }) {
@@ -49,14 +49,16 @@ export function TimerDial({ timer, phase, onSecond }) {
   if (ms == null) return null;
   const total = timer.durationMs || 1, frac = Math.max(0, Math.min(1, ms / total));
   const R = 44, C = 2 * Math.PI * R;
-  const state = phase === "TIMER_RUNNING" ? (timer.running ? (secs <= 3 ? "urgent" : "running") : "paused") : phase === "QUESTION_VISIBLE" ? "idle" : "done";
+  // "lead": the host has started the timer and a lead-in sound is playing; the count starts when it ends.
+  const leading = phase === "TIMER_RUNNING" && timer.running && timer.leadMs > 0 && timer.deadline - clock.now() > timer.durationMs;
+  const state = phase === "TIMER_RUNNING" ? (leading ? "lead" : timer.running ? (secs <= 3 ? "urgent" : "running") : "paused") : phase === "QUESTION_VISIBLE" ? "idle" : "done";
   return html`<div class="dial ${state}" data-testid="timer" data-state=${state} data-seconds=${secs}>
     <svg viewBox="0 0 100 100" aria-hidden="true">
       <circle class="dial-track" cx="50" cy="50" r=${R} />
       <circle class="dial-arc" cx="50" cy="50" r=${R} stroke-dasharray=${C} stroke-dashoffset=${C * (1 - frac)} transform="rotate(-90 50 50)" />
     </svg>
     <b>${state === "done" ? 0 : secs}</b>
-    <span>${state === "idle" ? "seconds, when the timer starts" : state === "paused" ? "paused" : state === "done" ? "time is up" : secs === 1 ? "second" : "seconds"}</span>
+    <span>${state === "idle" ? "seconds, when the timer starts" : state === "lead" ? "get ready" : state === "paused" ? "paused" : state === "done" ? "time is up" : secs === 1 ? "second" : "seconds"}</span>
   </div>`;
 }
 

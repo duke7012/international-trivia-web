@@ -5,6 +5,9 @@ import { connect, clock, plural } from "../net.js";
 import { createWorld, ZONES, zoneOf, STOPS } from "./world.js";
 import { QuestionCard, useRemaining } from "../stage.js";
 import { sfx, play } from "./sfx.js";
+import { createCuePlayer } from "./cues.js";
+import { answerShowing } from "/shared/cues.mjs";
+import { LATE_STAGE_STOP } from "/shared/schema.mjs";
 import { mapDots, ROUTE, legPath } from "./map.js";
 
 const params = new URLSearchParams(location.search);
@@ -24,15 +27,17 @@ function sounds(prev, v) {
   if (MONITOR || !prev || prev.workspace !== v.workspace) return;
   sfx.setVolume(v.sound.volume);
   const to = (ph) => prev.phase !== ph && v.phase === ph;
-  if (to("FLIGHT_ANIMATING")) play.takeoff();
-  if (to("DESTINATION_ARRIVED") && prev.phase === "FLIGHT_ANIMATING") play.land();
-  if (to("QUESTION_VISIBLE") && prev.phase === "DESTINATION_ARRIVED") play.card();
-  if (to("BOARDS_UP")) play.boardsUp(v.sound.timer);
-  if (to("ANSWER_REVEALED")) play.reveal();
+  // Built-in sounds stand in only where the host has not supplied a file of their own.
+  const own = (...ids) => ids.some((id) => v.cues?.[id]);
+  if (to("FLIGHT_ANIMATING") && !own("flight")) play.takeoff();
+  if (to("DESTINATION_ARRIVED") && prev.phase === "FLIGHT_ANIMATING" && !own("flight")) play.land();
+  if (to("QUESTION_VISIBLE") && prev.phase === "DESTINATION_ARRIVED" && !own("questionLoop")) play.card();
+  if (to("BOARDS_UP") && !own("thinkOver", "boardsLoop")) play.boardsUp(v.sound.timer);
+  if (to("ANSWER_REVEALED") && !own("revealLead", "correct")) play.reveal();
   if (to("ALL_ELIMINATED") && prev.phase !== "RESCUE") play.mayday();
   if (to("FINISHED")) play.goldenBell();
   if (v.lastRescue && !prev.lastRescue) play.fanfare();
-  if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight") play.takeoff();
+  if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight" && !own("flight")) play.takeoff();
   const r = v.rescue, pr = prev.rescue;
   if (r) {
     if (!pr || pr.attempt !== r.attempt) play.mayday();
@@ -221,7 +226,15 @@ function Screen({ v, status, armed, onArm }) {
   const [at, setAt] = useState(v.stop);
   useEffect(() => { const t = setInterval(() => setAt(world.progress()), 120); return () => clearInterval(t); }, []);
   const flying = pf ? clock.now() < pf.startedAt + pf.durationMs : v.phase === "FLIGHT_ANIMATING";
-  const onSecond = (s) => !MONITOR && play.tick(v.sound.timer, s <= 3);
+  const onSecond = (s) => !MONITOR && !v.cues?.[v.stop >= LATE_STAGE_STOP ? "thinkDrums" : "thinkClock"] && play.tick(v.sound.timer, s <= 3);
+  // The answer may wait for a lead-in sound to finish; redraw at that moment.
+  const [, redraw] = useState(0);
+  const shown = answerShowing(v, clock.now());
+  useEffect(() => {
+    if (!v.answer || shown) return;
+    const t = setTimeout(() => redraw((n) => n + 1), Math.max(0, v.answerAt - clock.now()) + 20);
+    return () => clearTimeout(t);
+  }, [v.answerAt, !!v.answer, shown]);
   const quiet = !!v.question || !!pq || ["ALL_ELIMINATED", "RESCUE", "FINISHED"].includes(v.phase);
 
   let body = null;
@@ -230,7 +243,7 @@ function Screen({ v, status, armed, onArm }) {
   else if (v.phase === "LOBBY") body = v.topicBoard ? html`<${TopicBoard} v=${v} />` : html`<${Lobby} v=${v} />`;
   else if (v.phase === "FLIGHT_ANIMATING") body = html`<${Flying} to=${v.flight.to} />`;
   else if (v.phase === "DESTINATION_ARRIVED") body = html`<${Waiting} v=${v} />`;
-  else if (v.question) body = html`<div class="veil"></div><${QuestionCard} key=${"q" + v.stop} q=${v.question} number=${v.stop} phase=${v.phase} answer=${v.answer} timer=${v.timer} mstate=${v.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} onSecond=${onSecond} />
+  else if (v.question) body = html`<div class="veil"></div><${QuestionCard} key=${"q" + v.stop} q=${v.question} number=${v.stop} phase=${v.answer && !shown ? "BOARDS_UP" : v.phase} answer=${shown ? v.answer : null} timer=${v.timer} mstate=${v.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} onSecond=${onSecond} />
     ${v.phase === "ELIMINATION_REVIEW" && html`<p class="checking" data-testid="checking"><i class="pulse"></i>Checking boards</p>`}`;
   else if (v.phase === "READY_TO_FLY") body = v.topicBoard ? html`<${TopicBoard} v=${v} />` : html`<${Between} v=${v} />`;
   else if (v.phase === "ALL_ELIMINATED") body = html`<${AllOut} v=${v} />`;
@@ -254,11 +267,12 @@ function Screen({ v, status, armed, onArm }) {
 let view = null, status = "online", armed = false;
 const root = document.getElementById("overlay");
 const draw = () => view && render(html`<${Screen} v=${view} status=${status} armed=${armed} onArm=${arm} />`, root);
-function arm() { if (!armed && sfx.arm()) { armed = true; reportSound(); draw(); } }
+const cuePlayer = MONITOR ? null : createCuePlayer();
+function arm() { if (!armed && sfx.arm()) { armed = true; cuePlayer?.arm(); reportSound(); draw(); } }
 if (!MONITOR) { addEventListener("pointerdown", arm); addEventListener("keydown", arm); }
 
 connect("projector", {
   monitor: MONITOR, cid,
-  onState(v) { sounds(view, v); view = v; world.set(sceneFor(v)); draw(); },
+  onState(v) { sounds(view, v); view = v; world.set(sceneFor(v)); cuePlayer?.update(v); draw(); },
   onStatus(s) { if (s === "online" && status !== "online") reportSound(); status = s; draw(); },
 });

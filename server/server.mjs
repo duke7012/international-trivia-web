@@ -10,7 +10,7 @@ import { createShow } from "./show.mjs";
 import { secretFromEnv, createAuth } from "./auth.mjs";
 import { ShowError } from "../shared/engine.mjs";
 import { mediaKind } from "../shared/schema.mjs";
-import { MIME, UPLOAD_EXT } from "./media-types.mjs";
+import { MIME, UPLOAD_EXT, SOUND_EXT, AREAS } from "./media-types.mjs";
 
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -86,9 +86,12 @@ const inside = (base, rel) => { const full = path.resolve(base, "." + path.posix
 // Uploads stream straight to the workspace's media folder on disk, so a large video never has to
 // fit in memory or in the browser's storage.
 function upload(req, res, url) {
-  const ws = store.current;
+  // Question media goes with the active workspace; show sounds have their own shared area.
+  const sound = url.searchParams.get("area") === "sounds";
+  const ws = { name: sound ? "sounds" : store.current.name };
   const original = path.basename(url.searchParams.get("name") || "file").slice(0, 200);
   const ext = path.extname(original).toLowerCase();
+  if (sound && !SOUND_EXT.includes(ext)) return json(res, 415, { error: `"${ext || original}" is not a sound file. Use mp3, wav, m4a or ogg.` });
   if (!UPLOAD_EXT.includes(ext)) return json(res, 415, { error: `"${ext || original}" files are not supported. Use an image, a video (mp4, webm, mov) or audio (mp3, wav, m4a, ogg).` });
   const declared = Number(req.headers["content-length"] || 0);
   if (declared > MAX_UPLOAD) return json(res, 413, { error: `That file is larger than the ${Math.round(MAX_UPLOAD / 1048576)} MB upload limit.` });
@@ -177,7 +180,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "GET" && req.method !== "HEAD") return json(res, 405, { error: "Method not allowed" });
     if (p.startsWith("/media/")) {
       const [, , ws, file] = p.split("/");
-      if (!WORKSPACES.includes(ws) || !file) return json(res, 404, { error: "Not found" });
+      if (!AREAS.includes(ws) || !file) return json(res, 404, { error: "Not found" });
       const full = inside(mediaDir(ws), file);
       return full ? sendFile(req, res, full, "private, max-age=86400, immutable") : json(res, 404, { error: "Not found" });
     }

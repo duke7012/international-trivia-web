@@ -294,3 +294,103 @@ test("the journey ends at stop 30", () => {
   assert.throws(() => run(s, ctx, "fly"), /final destination/);
   assert.equal(run(s, ctx, "finishShow").phase, "FINISHED");
 });
+
+// ---------- the host's own show sounds ----------
+import { timerRemaining } from "../shared/engine.mjs";
+import { planAudio, answerShowing } from "../shared/cues.mjs";
+import { cueForFile, normalizeSounds, SOUND_CUES } from "../shared/schema.mjs";
+
+const snd = (ms = 5000) => ({ src: "/media/sounds/x.mp3", name: "x.mp3", durationMs: ms });
+
+test("the user's file names are matched to the right moments", () => {
+  const files = {
+    "goldenbell_game_fast_forward_long.mp3": "flight",
+    "goldenbell_game_question_show_loop.mp3": "questionLoop",
+    "goldenbell_game_think_start.mp3": "thinkStart",
+    "goldenbell_game_think_clock_extended.mp3": "thinkClock",
+    "goldenbell_game_think_drums_extended.mp3": "thinkDrums",
+    "goldenbell_game_think_over.mp3": "thinkOver",
+    "goldenbell_game_correct_answer_reveal.mp3": "revealLead",
+    "goldenbell_game_correct_answer.mp3": "correct",
+    "goldenbell_game_congratulations.mp3": "congrats",
+    "goldenbell_game_contestant_answer_reveal_loop.mp3": "boardsLoop",
+    "goldenbell_game_contestant_elimination.mp3": "elimination",
+  };
+  for (const [name, id] of Object.entries(files)) assert.equal(cueForFile(name), id, name);
+  assert.equal(new Set(Object.values(files)).size, SOUND_CUES.length, "every moment has a file");
+  assert.equal(cueForFile("holiday_photo.mp3"), null);
+  assert.deepEqual(normalizeSounds({ flight: { src: "https://elsewhere/x.mp3" }, nonsense: snd() }), {}, "only files in the sounds area are accepted");
+});
+
+test("a timer lead-in delays the count, not the host's control: pause and resume keep both parts", () => {
+  const ctx = makeCtx({ sounds: { thinkStart: snd(3000) } });
+  let s = run(roster(ctx, "Ana"), ctx, "fly", "arrive", "showQuestion", "startTimer");
+  assert.equal(s.phase, "TIMER_RUNNING");
+  assert.equal(s.timer.deadline, 1000 + 3000 + 10_000);
+  assert.equal(timerRemaining(s.timer, 2000), 10_000, "the count has not started during the lead-in");
+  assert.equal(timerRemaining(s.timer, 6000), 8000);
+  assert.equal(due(s, 13_999), null);
+  assert.deepEqual(due(s, 14_000), { type: "timeUp" });
+  const paused = reduce(s, { type: "pauseTimer" }, { ...ctx, now: 2000 });
+  assert.equal(paused.timer.remainingMs, 10_000);
+  assert.equal(paused.timer.leadLeftMs, 2000);
+  assert.equal(reduce(paused, { type: "resumeTimer" }, { ...ctx, now: 50_000 }).timer.deadline, 62_000);
+});
+
+test("an answer lead-in delays when the answer shows; without one it shows at once", () => {
+  const plain = run(toBoards(roster(makeCtx(), "Ana"), makeCtx()), makeCtx(), "revealAnswer");
+  assert.equal(plain.answerAt, 1000);
+  const ctx = makeCtx({ sounds: { revealLead: snd(4000) } });
+  const s = run(toBoards(roster(ctx, "Ana"), ctx), ctx, "revealAnswer");
+  assert.equal(s.phase, "ANSWER_REVEALED");
+  assert.equal(s.answerAt, 5000);
+  assert.equal(answerShowing({ answer: {}, answerAt: 5000 }, 4999), false);
+  assert.equal(answerShowing({ answer: {}, answerAt: 5000 }, 5000), true);
+  // a mistaken very long file cannot stall the show
+  const long = makeCtx({ sounds: { revealLead: snd(999_000) } });
+  assert.equal(run(toBoards(roster(long, "Ana"), long), long, "revealAnswer").answerAt, 1000 + 20_000);
+});
+
+test("which sound plays when", () => {
+  const all = Object.fromEntries(SOUND_CUES.map((c) => [c.id, snd(c.id === "thinkStart" ? 3000 : c.id === "revealLead" ? 4000 : 5000)]));
+  const v = (over) => ({ phase: "LOBBY", stop: 3, cues: all, ...over });
+  const cueNames = (p) => p && p.steps.map((x) => x.cue);
+
+  assert.equal(planAudio(v({}), 0), null, "silence before the show");
+  assert.equal(planAudio(v({ phase: "DESTINATION_ARRIVED" }), 0), null, "silence while waiting at a destination");
+
+  const flying = v({ phase: "FLIGHT_ANIMATING", flight: { startedAt: 1000, durationMs: 8000 } });
+  assert.deepEqual(planAudio(flying, 2000).steps, [{ cue: "flight", at: 1000 }]);
+  assert.equal(planAudio(flying, 9000), null, "the flight sound stops when the plane lands");
+
+  const q = planAudio(v({ phase: "QUESTION_VISIBLE", media: { status: "idle" } }), 0);
+  assert.deepEqual(q.steps, [{ cue: "questionLoop", loop: true }]);
+  assert.equal(q.hold, false);
+  assert.equal(planAudio(v({ phase: "QUESTION_VISIBLE", media: { status: "playing" } }), 0).hold, true, "pauses while the question's own clip plays");
+
+  const timer = { running: true, startedAt: 1000, leadMs: 3000, durationMs: 10_000, deadline: 14_000 };
+  assert.deepEqual(cueNames(planAudio(v({ phase: "TIMER_RUNNING", timer }), 2000)), ["thinkStart"], "lead-in first");
+  const early = planAudio(v({ phase: "TIMER_RUNNING", timer }), 5000);
+  assert.deepEqual(early.steps, [{ cue: "thinkClock", loop: true, at: 4000 }], "then the clock music for destinations 1 to 15");
+  assert.deepEqual(cueNames(planAudio(v({ phase: "TIMER_RUNNING", timer, stop: 15 }), 5000)), ["thinkClock"]);
+  assert.deepEqual(cueNames(planAudio(v({ phase: "TIMER_RUNNING", timer, stop: 16 }), 5000)), ["thinkDrums"], "drums from destination 16");
+  assert.deepEqual(cueNames(planAudio(v({ phase: "TIMER_RUNNING", timer, stop: 30 }), 5000)), ["thinkDrums"]);
+  assert.notEqual(planAudio(v({ phase: "TIMER_RUNNING", timer }), 2000).key, early.key, "lead-in and countdown are separate stretches");
+  assert.equal(planAudio(v({ phase: "TIMER_RUNNING", timer: { ...timer, running: false, remainingMs: 6000, leadLeftMs: 0, deadline: null } }), 9000).hold, true, "pausing the timer pauses its music");
+
+  assert.deepEqual(planAudio(v({ phase: "BOARDS_UP" }), 0).steps, [{ cue: "thinkOver", live: true }, { cue: "boardsLoop", loop: true }], "time-up sting, then the boards loop");
+
+  const revealed = v({ phase: "ANSWER_REVEALED", answer: {}, answerAt: 5000 });
+  assert.deepEqual(planAudio(revealed, 2000).steps, [{ cue: "revealLead", at: 1000 }], "lead-in before the answer shows");
+  assert.deepEqual(cueNames(planAudio(revealed, 5000)), ["correct", "congrats"], "then correct answer, then congratulations");
+
+  assert.deepEqual(planAudio(v({ phase: "ELIMINATION_REVIEW" }), 0).steps, [{ cue: "elimination", loop: true }]);
+  assert.equal(planAudio(v({ phase: "READY_TO_FLY" }), 0), null);
+
+  // with only some files supplied, only those play
+  assert.equal(planAudio({ phase: "BOARDS_UP", stop: 1, cues: {} }, 0), null);
+  assert.deepEqual(cueNames(planAudio({ phase: "BOARDS_UP", stop: 1, cues: { boardsLoop: snd() } }, 0)), ["boardsLoop"]);
+  // previews stay quiet apart from the flight preview
+  assert.equal(planAudio(v({ phase: "LOBBY", preview: { kind: "question" } }), 0), null);
+  assert.deepEqual(cueNames(planAudio(v({ phase: "LOBBY", preview: { kind: "flight", startedAt: 0, durationMs: 9000 } }), 100)), ["flight"]);
+});

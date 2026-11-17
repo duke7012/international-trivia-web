@@ -5,4 +5,7 @@ export const MIME = {
   ".woff2": "font/woff2", ".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".ogv": "video/ogg",
   ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".oga": "audio/ogg", ".m4a": "audio/mp4", ".aac": "audio/aac", ".flac": "audio/flac", ".ico": "image/x-icon",
 };
+// Show sounds are kept apart from question media, in their own area.
+export const SOUND_EXT = [".mp3", ".wav", ".ogg", ".oga", ".m4a", ".aac", ".flac"];
+export const AREAS = ["live", "demo", "sounds"];
 export const UPLOAD_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".mp4", ".m4v", ".webm", ".mov", ".ogv", ".mp3", ".wav", ".ogg", ".oga", ".m4a", ".aac", ".flac"];

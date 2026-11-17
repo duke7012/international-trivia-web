@@ -12,7 +12,8 @@
     "test": "node --test tests/engine.test.mjs tests/server.test.mjs",
     "test:e2e": "node tests/acceptance.mjs",
     "cf:dev": "wrangler dev",
-    "cf:deploy": "wrangler deploy"
+    "cf:deploy": "wrangler deploy",
+    "test:sounds": "node tests/sounds.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.163.0"

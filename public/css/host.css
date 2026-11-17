@@ -220,6 +220,13 @@ legend { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 6px;
 .stage-frame .pass { animation: none; }
 
 /* ---- rescue + settings ---- */
+.sound-list { list-style: none; margin: 12px 0 8px; padding: 0; display: grid; gap: 5px; }
+.sound-list li { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.sound-list li.has { border-color: rgba(31, 174, 142, .55); }
+.sound-what, .sound-file { display: grid; min-width: 0; }
+.sound-what span, .sound-file span { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+.sound-file span:first-child { font-size: 14px; font-weight: 600; white-space: nowrap; }
+@media (max-width: 860px) { .sound-list li { grid-template-columns: 1fr; } }
 .setup { display: grid; gap: 14px; max-width: 1100px; }
 .clue-edit { margin: 12px 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .clue-edit li { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }

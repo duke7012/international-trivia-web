@@ -19,7 +19,7 @@ export const stageQuestion = (q, settings) => ({
 });
 export const stageAnswer = (q) => ({ correctChoice: q.answerFormat === "choice" ? q.correctChoice : null, text: answerText(q), explanation: q.explanation });
 
-export function projectorView(ws, preview, now) {
+export function projectorView(ws, preview, now, sounds = {}) {
   const s = ws.session, st = ws.settings;
   const names = (ids) => (st.showNames ? ids.map((id) => s.contestants.find((c) => c.id === id)?.name).filter(Boolean) : []);
   const v = {
@@ -27,6 +27,9 @@ export function projectorView(ws, preview, now) {
     phase: s.phase, stop: s.stop, totalStops: TOTAL_STOPS, flight: s.flight,
     counts: { active: active(s).length, eliminated: eliminated(s).length, total: s.contestants.length },
     sound: { timer: st.timerSound, volume: st.volume },
+    // the host's own sound files: where each is, and how long it runs (never its name)
+    cues: Object.fromEntries(Object.entries(sounds).map(([id, s]) => [id, { src: s.src, durationMs: s.durationMs }])),
+    answerAt: 0,
     chosenTopic: s.stop > 0 ? s.chosenTopic : null,
     question: null, answer: null, timer: null, media: null,
     lastReview: null, topicBoard: null, rescue: null, lastRescue: null, finale: null, preview: null,
@@ -35,7 +38,7 @@ export function projectorView(ws, preview, now) {
     v.question = stageQuestion(s.shown.question, st);
     v.timer = s.timer || { idle: true, durationMs: v.question.countdown * 1000 };
     v.media = s.media;
-    if (ANSWER_PHASES.includes(s.phase)) v.answer = stageAnswer(s.shown.question);
+    if (ANSWER_PHASES.includes(s.phase)) { v.answer = stageAnswer(s.shown.question); v.answerAt = s.answerAt || 0; }
   }
   if (s.lastReview && ["READY_TO_FLY", "ALL_ELIMINATED"].includes(s.phase)) v.lastReview = { stop: s.lastReview.stop, count: s.lastReview.eliminatedIds.length, names: names(s.lastReview.eliminatedIds) };
   if (s.topicBoard) {

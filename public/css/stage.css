@@ -64,6 +64,7 @@
 .dial span { font-size: 1.25em; max-width: 9em; text-align: center; line-height: 1.15; color: rgba(255, 250, 240, .7); margin-top: .5em; }
 .dial.idle b { color: rgba(255, 250, 240, .5); }
 .dial.idle .dial-arc { stroke: rgba(255, 250, 240, .32); }
+.dial.lead b { color: var(--gold); animation: blink 1s steps(2) infinite; }
 .dial.urgent .dial-arc { stroke: var(--red); }
 .dial.urgent b { color: #ff8f8a; animation: beat 1s var(--ease) infinite; }
 .dial.done .dial-arc { stroke: transparent; }

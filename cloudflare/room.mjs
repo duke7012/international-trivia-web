@@ -9,7 +9,8 @@ import { DurableObject } from "cloudflare:workers";
 import { createShow } from "../server/show.mjs";
 import { createAuth } from "../server/auth.mjs";
 import { WORKSPACES, PARTS, hydrate, demoContent, mediaRefs, newId } from "../server/bank.mjs";
-import { MIME, UPLOAD_EXT } from "../server/media-types.mjs";
+import { MIME, UPLOAD_EXT, SOUND_EXT } from "../server/media-types.mjs";
+import { normalizeSounds } from "../shared/schema.mjs";
 import { ShowError, newSession } from "../shared/engine.mjs";
 import seedQuestions from "../demo/seed/questions.json";
 import seedRescue from "../demo/seed/rescue.json";
@@ -39,7 +40,8 @@ export class ShowRoom extends DurableObject {
     const st = this.ctx.storage;
     const saved = await st.get(["app", "auth", ...WORKSPACES.flatMap((w) => PARTS.map((part) => `${w}/${part}`))]);
     const raw = (w) => Object.fromEntries(PARTS.map((part) => [part, saved.get(`${w}/${part}`)]));
-    const app = { workspace: "live", ...(saved.get("app") || {}) };
+    const app = { workspace: "live", sounds: {}, ...(saved.get("app") || {}) };
+    app.sounds = normalizeSounds(app.sounds);
     if (!WORKSPACES.includes(app.workspace)) app.workspace = "live";
     const spaces = { live: hydrate("live", raw("live")), demo: null };
     const seedDemo = () => {
@@ -55,7 +57,8 @@ export class ShowRoom extends DurableObject {
       saveApp: () => { st.put("app", app); },
       save: (ws, part) => { st.put(`${ws.name}/${part}`, ws[part]); },
       resetDemo: () => { spaces.demo = seedDemo(); spaces.demo.session = newSession(); },
-      sweepMedia: (ws, extra) => this.ctx.waitUntil(this.sweep(ws, extra).catch(() => {})),
+      sweepMedia: (ws, extra) => this.ctx.waitUntil(this.sweep(ws.name, mediaRefs(ws, extra)).catch(() => {})),
+      sweepSounds: (sounds) => this.ctx.waitUntil(this.sweep("sounds", new Set(Object.values(sounds).map((s) => s.src.split("/").pop()))).catch(() => {})),
     };
     this.problem = passwordProblem(this.env);
     this.auth = createAuth(this.problem ? "unset" : this.env.HOST_PASSWORD, () => Date.now(), { state: saved.get("auth") || { byAddress: {}, overall: [] }, save: (s) => { st.put("auth", s); } });
@@ -99,11 +102,10 @@ export class ShowRoom extends DurableObject {
   async alarm() { this.onClock(); }
 
   // ---------- media housekeeping ----------
-  async sweep(ws, extra) {
-    const refs = mediaRefs(ws, extra);
+  async sweep(area, refs) {
     let cursor;
     do {
-      const page = await this.env.MEDIA.list({ prefix: `${ws.name}/`, cursor });
+      const page = await this.env.MEDIA.list({ prefix: `${area}/`, cursor });
       for (const o of page.objects) if (!refs.has(o.key.split("/").pop()) && Date.now() - o.uploaded.getTime() > DAY) await this.env.MEDIA.delete(o.key);
       cursor = page.truncated ? page.cursor : null;
     } while (cursor);
@@ -168,11 +170,13 @@ export class ShowRoom extends DurableObject {
         if (p === "/api/host/upload/start" && method === "POST") {
           const original = (url.searchParams.get("name") || "file").split(/[\\/]/).pop().slice(0, 200);
           const dot = original.lastIndexOf("."), ext = dot < 0 ? "" : original.slice(dot).toLowerCase();
+          const sound = url.searchParams.get("area") === "sounds";
+          if (sound && !SOUND_EXT.includes(ext)) return json({ error: `"${ext || original}" is not a sound file. Use mp3, wav, m4a or ogg.` }, 415);
           if (!UPLOAD_EXT.includes(ext)) return json({ error: `"${ext || original}" files are not supported. Use an image, a video (mp4, webm, mov) or audio (mp3, wav, m4a, ogg).` }, 415);
           const size = Number(url.searchParams.get("size") || 0);
           if (!size) return json({ error: "That file is empty." }, 400);
           if (size > maxUpload(this.env)) return json({ error: `That file is larger than the ${Math.round(maxUpload(this.env) / 1048576)} MB upload limit.` }, 413);
-          const key = `${this.store.current.name}/${newId()}${newId()}${ext}`;
+          const key = `${sound ? "sounds" : this.store.current.name}/${newId()}${newId()}${ext}`;
           const upload = await this.env.MEDIA.createMultipartUpload(key, { httpMetadata: { contentType: MIME[ext] || "application/octet-stream" } });
           return json({ key, uploadId: upload.uploadId, chunkBytes: CHUNK_BYTES });
         }

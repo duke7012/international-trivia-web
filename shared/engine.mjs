@@ -5,7 +5,7 @@
 // The rule this file exists to protect: flying, showing the question, starting the timer and
 // revealing the answer are four separate host actions. No action here performs two of them.
 
-import { TOTAL_STOPS, publishErrors, difficultyForStop, clueReady, rescueReturnCount } from "./schema.mjs";
+import { TOTAL_STOPS, publishErrors, difficultyForStop, clueReady, rescueReturnCount, MAX_LEAD_MS } from "./schema.mjs";
 
 export class ShowError extends Error {}
 const fail = (msg) => { throw new ShowError(msg); };
@@ -31,7 +31,7 @@ export function newSession() {
     played: [], contestants: [],
     review: null, lastReview: null, topicBoard: null,
     rescue: null, rescueAttempts: 0, usedClueIds: [], lastRescue: null,
-    allOutAtStop: null,
+    allOutAtStop: null, answerAt: 0,
   };
 }
 
@@ -105,6 +105,11 @@ export function mediaReduce(m, op, now, arg) {
     default: return fail("Unknown media control.");
   }
 }
+
+// Time left on the question timer. A lead-in sound may play first; the count only starts after it.
+export const timerRemaining = (t, now) => (t.running ? Math.min(t.durationMs, Math.max(0, t.deadline - now)) : t.remainingMs);
+// Length of a host-supplied lead-in sound, if there is one.
+const lead = (ctx, id) => Math.min(MAX_LEAD_MS, Math.max(0, ctx.sounds?.[id]?.durationMs || 0));
 
 // ---------- the reducer ----------
 
@@ -239,17 +244,20 @@ const handlers = {
   startTimer(s, _, ctx) {
     need(s, ["QUESTION_VISIBLE"], "Starting the timer");
     const durationMs = (s.shown.question.countdown || ctx.settings.defaultCountdown) * 1000;
-    return { ...s, phase: "TIMER_RUNNING", timer: { durationMs, deadline: ctx.now + durationMs, remainingMs: durationMs, running: true } };
+    // If the host has a "timer lead-in" sound, it plays first and the count starts when it ends.
+    const leadMs = lead(ctx, "thinkStart");
+    return { ...s, phase: "TIMER_RUNNING", timer: { durationMs, leadMs, startedAt: ctx.now, deadline: ctx.now + leadMs + durationMs, remainingMs: durationMs, running: true } };
   },
   pauseTimer(s, _, ctx) {
     need(s, ["TIMER_RUNNING"], "Pausing the timer");
     if (!s.timer.running) return s;
-    return { ...s, timer: { ...s.timer, running: false, remainingMs: Math.max(0, s.timer.deadline - ctx.now), deadline: null } };
+    const left = Math.max(0, s.timer.deadline - ctx.now);
+    return { ...s, timer: { ...s.timer, running: false, remainingMs: Math.min(s.timer.durationMs, left), leadLeftMs: Math.max(0, left - s.timer.durationMs), deadline: null } };
   },
   resumeTimer(s, _, ctx) {
     need(s, ["TIMER_RUNNING"], "Resuming the timer");
     if (s.timer.running) return s;
-    return { ...s, timer: { ...s.timer, running: true, deadline: ctx.now + s.timer.remainingMs } };
+    return { ...s, timer: { ...s.timer, running: true, deadline: ctx.now + (s.timer.leadLeftMs || 0) + s.timer.remainingMs } };
   },
   resetTimer(s) { need(s, ["TIMER_RUNNING", "BOARDS_UP"], "Resetting the timer"); return { ...s, phase: "QUESTION_VISIBLE", timer: null }; },
   // Reaching zero (or the host calling time) raises the boards. It never reveals the answer.
@@ -259,7 +267,9 @@ const handlers = {
   },
 
   // ----- Step D: reveal -----
-  revealAnswer(s) { need(s, ["BOARDS_UP"], "Revealing the answer"); return { ...s, phase: "ANSWER_REVEALED" }; },
+  // The reveal is the host's decision at this moment. If there is an "answer lead-in" sound, the
+  // answer appears on screen when that sound ends.
+  revealAnswer(s, _, ctx) { need(s, ["BOARDS_UP"], "Revealing the answer"); return { ...s, phase: "ANSWER_REVEALED", answerAt: ctx.now + lead(ctx, "revealLead") }; },
 
   // ----- eliminations -----
   startReview(s) { need(s, ["ANSWER_REVEALED"], "The elimination review"); return { ...s, phase: "ELIMINATION_REVIEW", review: { wrong: [] } }; },

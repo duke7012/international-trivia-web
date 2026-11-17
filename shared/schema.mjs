@@ -160,6 +160,35 @@ export function normalizeSettings(s = {}) {
   };
 }
 
+// ---- Show sounds: the host's own audio files, one per moment of the show ----
+// `match` recognises a file by its name, so a whole folder can be dropped in at once.
+export const SOUND_CUES = [
+  { id: "flight", label: "Plane in flight", when: "Plays while the plane flies to the next destination.", match: /fast_forward|flight|flying/i },
+  { id: "questionLoop", label: "Question on screen", when: "Loops while you read the question, until you start the timer.", match: /question_show|question_loop/i },
+  { id: "thinkStart", label: "Timer lead-in", when: "Plays when you press Start timer. The countdown begins when it ends.", match: /think_start/i },
+  { id: "thinkClock", label: "Countdown, destinations 1 to 15", when: "Plays while the timer counts down.", match: /think_clock/i },
+  { id: "thinkDrums", label: "Countdown, destinations 16 to 30", when: "Plays while the timer counts down.", match: /think_drums/i },
+  { id: "thinkOver", label: "Time is up", when: "Plays once when the timer stops.", match: /think_over/i },
+  { id: "boardsLoop", label: "Boards up", when: "Loops while contestants hold up their boards.", match: /contestant_answer_reveal|boards_up/i },
+  { id: "revealLead", label: "Answer lead-in", when: "Plays when you press Reveal answer. The answer appears when it ends.", match: /correct_answer_reveal/i },
+  { id: "correct", label: "Correct answer appears", when: "Plays as the answer appears.", match: /correct_answer(?!_reveal)/i },
+  { id: "congrats", label: "After the correct answer", when: "Plays straight after the one above.", match: /congratulations/i },
+  { id: "elimination", label: "Checking eliminations", when: "Loops while you mark who is out.", match: /contestant_elimination|elimination/i },
+];
+export const cueForFile = (name) => SOUND_CUES.find((c) => c.match.test(name || ""))?.id || null;
+export const LATE_STAGE_STOP = 16; // from this destination on, the countdown uses the "drums" music
+export const MAX_LEAD_MS = 20000; // a lead-in longer than this is cut, so a wrong file cannot stall the show
+
+export function normalizeSounds(input = {}) {
+  const out = {};
+  for (const { id } of SOUND_CUES) {
+    const s = input && input[id];
+    if (!s || typeof s.src !== "string" || !/^\/media\/sounds\/[\w.-]+$/.test(s.src)) continue;
+    out[id] = { src: s.src, name: str(s.name, 200), durationMs: Math.round(num(s.durationMs, 0, 3600000, 0)) };
+  }
+  return out;
+}
+
 export function difficultyForStop(stop, settings) {
   if (stop <= settings.easyUntil) return "easy";
   if (stop <= settings.mediumUntil) return "medium";

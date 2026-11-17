@@ -9,7 +9,8 @@ buttons, and nothing in the app performs one of them on its own.
 
 ## Run it
 
-You need [Node.js](https://nodejs.org) 20 or newer. Nothing to install: there are no dependencies.
+You need [Node.js](https://nodejs.org) 20 or newer. Nothing to install: running the show needs no
+dependencies. (`npm install` is only needed for the tests and for deploying to Cloudflare.)
 
 ```bash
 node server/server.mjs
@@ -46,7 +47,52 @@ browser and an internet connection. It needs a host that offers:
 - a permanent disk for the `data` folder (questions, show state, uploaded media),
 - exactly one running copy. The show's state lives in that one process.
 
-This repository includes `render.yaml`, a ready-made setup for [Render](https://render.com):
+Two ready-made setups are included: Cloudflare (below) and Render.
+
+#### Cloudflare
+
+Cloudflare has no always-on server with a disk, so the app runs there in a different shape with
+the same show rules: a Worker serves the pages, one Durable Object holds and saves the live show,
+and R2 storage holds uploaded media. `wrangler.jsonc` describes all of it.
+
+```bash
+npm install
+```
+
+```bash
+npx wrangler login
+```
+
+```bash
+npx wrangler deploy
+```
+
+```bash
+npx wrangler secret put HOST_PASSWORD
+```
+
+The last command asks for the host password (at least 10 characters). Until it is set, the
+dashboard stays locked and says so. Deploying prints your address, for example
+`https://golden-bell.<your-subdomain>.workers.dev`.
+
+You can also deploy without the command line: in the Cloudflare dashboard open Workers and Pages,
+choose Create application, pick GitHub and select this repository. Name the Worker `golden-bell`
+(it has to match the name in `wrangler.jsonc`). After it deploys, add `HOST_PASSWORD` as a secret
+under the Worker's Settings, Variables and Secrets.
+
+`npm run cf:dev` runs the Cloudflare version on your own computer (put `HOST_PASSWORD="..."` in a
+file named `.dev.vars` first).
+
+Things that differ on Cloudflare:
+
+- Uploads travel in 16 MB pieces, because Cloudflare limits one request to 100 MB. A dropped
+  piece is retried by itself.
+- Media is stored in an R2 bucket named `golden-bell-media`. R2 has to be turned on for your
+  account before the first deploy.
+
+#### Render
+
+`render.yaml` is a ready-made setup for [Render](https://render.com):
 
 1. Create a Render account and add a payment method (a permanent disk needs a paid plan).
 2. In Render choose **New**, then **Blueprint**, and connect this GitHub repository.
@@ -141,6 +187,32 @@ difficulty for that stage of the journey (by default destinations 1 to 10 are ea
 medium, 21 to 30 hard; change this in Settings). A topic with nothing eligible is disabled and
 says why. After the flight you still press Show question and Start timer yourself.
 
+## Your own show sounds
+
+In **Settings, Show sounds**, press **Add sound files** and select all your audio files at once.
+Each file is matched to its moment by its file name, and you can also set or replace any moment
+by hand. A moment with no file of its own uses the built-in sound. The sounds are shared by the
+live show and the demo rehearsal, and play on the projector.
+
+| Moment | What happens | Recognised in a file name |
+| --- | --- | --- |
+| Plane in flight | Plays while the plane flies, and stops when it lands | `fast_forward` |
+| Question on screen | Loops until you start the timer. Pauses while a question's own clip plays | `question_show` |
+| Timer lead-in | Plays when you press Start timer. The countdown begins when it ends | `think_start` |
+| Countdown, destinations 1 to 15 | Plays while the timer counts | `think_clock` |
+| Countdown, destinations 16 to 30 | Plays while the timer counts | `think_drums` |
+| Time is up | Plays once when the timer stops | `think_over` |
+| Boards up | Loops after the time-up sound, while boards are raised | `contestant_answer_reveal` |
+| Answer lead-in | Plays when you press Reveal answer. The answer appears when it ends | `correct_answer_reveal` |
+| Correct answer appears | Plays as the answer appears | `correct_answer` |
+| After the correct answer | Plays straight after the one above | `congratulations` |
+| Checking eliminations | Loops while you mark who is out | `contestant_elimination` |
+
+The two lead-ins change the timing on purpose: the host still presses Start timer and Reveal
+answer, and the count or the answer then waits for the lead-in to finish (never more than 20
+seconds). A projector that is refreshed mid-show rejoins looping music in the right place and
+does not replay one-off sounds.
+
 ## Everyone eliminated: MAYDAY! Save the flight!
 
 There is no scheduled rescue. A rescue only becomes possible when the last contestant is
@@ -185,9 +257,13 @@ or move a show, copy the `data/` folder. `data/live` is your show, `data/demo` i
 ## Tests
 
 ```bash
-npm test          # the rules of the show and the sign-in (33 tests, no browser needed)
-npm run test:e2e  # the 20 acceptance scenarios in a real browser
+npm test             # the rules of the show, the sounds and the sign-in (no browser needed)
+npm run test:e2e     # the 20 acceptance scenarios in a real browser
+npm run test:sounds  # your own show sounds, each at its moment, in a real browser
 ```
+
+To run the 20 scenarios against the Cloudflare version (served locally by `wrangler dev`), set
+`TARGET=cloudflare` and `E2E_PASSWORD` to the password in `.dev.vars`.
 
 The second needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`).
 It starts its own server with a throwaway data folder.
@@ -196,6 +272,8 @@ It starts its own server with a throwaway data folder.
 
 - `server/` is a small Node server with no dependencies. It holds the one authoritative show state,
   saves every change to disk, and pushes updates to both screens.
+- `server/show.mjs` is the show itself, independent of where it runs. The Node server and the
+  Cloudflare version in `cloudflare/` both wrap it, so the rules cannot differ between them.
 - `shared/engine.mjs` is the state machine: every rule above is a few lines there, and
   `tests/engine.test.mjs` exercises each one.
 - `public/js/projector/world.js` is the 3D journey (three.js). All artwork is built in code.

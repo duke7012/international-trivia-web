@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { newSession } from "../shared/engine.mjs";
 import { WORKSPACES, PARTS, hydrate, demoContent, mediaRefs } from "./bank.mjs";
+import { normalizeSounds } from "../shared/schema.mjs";
 
 export { WORKSPACES, newId } from "./bank.mjs";
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,8 +44,9 @@ function load(ws) {
 }
 
 export function openStore() {
-  fs.mkdirSync(DATA, { recursive: true });
-  const app = { workspace: "live", ...readJson(path.join(DATA, "app.json"), {}) };
+  fs.mkdirSync(mediaDir("sounds"), { recursive: true });
+  const app = { workspace: "live", sounds: {}, ...readJson(path.join(DATA, "app.json"), {}) };
+  app.sounds = normalizeSounds(app.sounds);
   if (!WORKSPACES.includes(app.workspace)) app.workspace = "live";
   const spaces = { live: load("live"), demo: load("demo") };
   return {
@@ -54,18 +56,22 @@ export function openStore() {
     save(ws, part) { writeJson(path.join(dir(ws.name), `${part}.json`), ws[part]); },
     resetDemo() { seedDemo(); spaces.demo = load("demo"); spaces.demo.session = newSession(); this.save(spaces.demo, "session"); },
     sweepMedia,
+    // Remove show-sound files that are no longer assigned to any moment.
+    sweepSounds(sounds) { sweepFolder(mediaDir("sounds"), new Set(Object.values(sounds).map((s) => s.src.split("/").pop()))); },
   };
 }
 
 // Delete uploaded files nothing refers to any more. Recent files are kept: an upload sitting in an
 // unsaved editor form is not referenced anywhere yet.
 export function sweepMedia(ws, extraRefs = [], maxAgeMs = 24 * 3600 * 1000) {
-  const refs = mediaRefs(ws, extraRefs);
+  return sweepFolder(mediaDir(ws.name), mediaRefs(ws, extraRefs), maxAgeMs);
+}
+function sweepFolder(folder, refs, maxAgeMs = 24 * 3600 * 1000) {
   const now = Date.now();
   let removed = 0;
-  for (const f of fs.readdirSync(mediaDir(ws.name))) {
+  for (const f of fs.readdirSync(folder)) {
     if (refs.has(f)) continue;
-    const full = path.join(mediaDir(ws.name), f);
+    const full = path.join(folder, f);
     try { if (now - fs.statSync(full).mtimeMs > maxAgeMs) { fs.unlinkSync(full); removed++; } } catch { /* already gone */ }
   }
   return removed;
