@@ -1,0 +1,188 @@
+# Golden Bell: Around the World
+
+A live-hosted quiz show for a room with a projector. An airplane flies a journey of 30 numbered
+destinations; each destination is one question. The host runs everything from a dashboard.
+
+**The rule the whole app is built around:** the host decides when the plane flies, when the
+question appears, when the timer starts, and when the answer is revealed. These are four separate
+buttons, and nothing in the app performs one of them on its own.
+
+## Run it
+
+You need [Node.js](https://nodejs.org) 20 or newer. Nothing to install: there are no dependencies.
+
+```bash
+node server/server.mjs
+```
+
+Then open:
+
+- **Host dashboard:** http://localhost:4173/host (the screen only you see)
+- **Projector:** http://localhost:4173/projector (drag this window to the projector, press F11)
+
+Click once on the projector window after opening it: browsers only allow sound after a click.
+The dashboard tells you if the projector's sound is not on yet.
+
+The show runs with no internet connection. Fonts, the 3D engine and all sounds are bundled.
+
+### Host on one device, projector on another
+
+By default the app only answers on the computer it runs on. To open the dashboard from a second
+device on the same network:
+
+```bash
+HOST=0.0.0.0 node server/server.mjs
+```
+
+The server prints its network address and a **host PIN**. The dashboard asks for the PIN, so the
+audience cannot open it. Set your own with `HOST_PIN=123456`. Other options: `PORT` (default 4173),
+`DATA_DIR` (where show data is saved), `MAX_UPLOAD_MB` (default 2048).
+
+## How one question runs
+
+| Step | Host presses | Show state | Projector |
+| --- | --- | --- | --- |
+| A | **Fly to next destination** | `FLIGHT_ANIMATING`, then `DESTINATION_ARRIVED` | Plane flies and lands. Waiting card: "Destination 12, awaiting question". No question, no timer. |
+| B | **Show question** | `QUESTION_VISIBLE` | Question card with media and choices. Timer stopped. |
+| C | **Start timer** | `TIMER_RUNNING`, then `BOARDS_UP` at zero | Countdown, then "Boards up!". Answer still hidden. |
+| D | **Reveal answer** | `ANSWER_REVEALED` | Correct answer and explanation. |
+| | **Check boards and eliminate** | `ELIMINATION_REVIEW`, then `READY_TO_FLY` | Who left the flight, who is still flying. |
+
+Skipping the flight animation lands on the same waiting card. It never shows the question.
+
+Useful extras on the dashboard: hide the question again, pause or reset the timer, call time
+early, and play, pause, replay or mute a video or audio clip. Playing a clip, or a clip ending,
+never starts the countdown.
+
+### What the projector knows
+
+The projector is only *sent* a question after you press Show question, and an answer after you
+press Reveal answer. So refreshing the projector on the waiting card cannot leak anything, and a
+refresh mid-question brings back exactly what was on screen. A running timer is restored from the
+server's deadline, not restarted.
+
+## Questions
+
+The app starts with **30 empty slots, each marked "Not configured"**. Nothing is preloaded. In the
+**Questions** tab you can write, edit, delete, duplicate and reorder questions.
+
+- **Presentation type** (separate from answer format): text only, image + text, video + text,
+  audio + text.
+- **Answer format:** multiple choice with four options, or a written answer with accepted
+  variants.
+- Also per question: country focus, topic, difficulty, explanation, host notes, countdown length.
+- **Save draft** keeps it out of the show. **Publish** makes it playable. Publishing is blocked,
+  with the reason shown, while something is missing or two questions share a country.
+- The right-hand **projector preview** is the real projector card, live as you type, including
+  image fit, size and crop position. It works any time.
+- **Preview on projector** puts the card on the real projector under a "Preview" banner. It never
+  moves the show, and is available between questions.
+- You can edit during the show. If you edit the question that is on the projector, the audience
+  keeps seeing the earlier version until you press **Update projector** on the Show tab.
+
+In the live show the plane will not fly into a slot that is empty or still a draft. The Fly button
+is disabled and says why.
+
+### Media
+
+Uploads are saved as files in the data folder on the show computer, not in the browser, so large
+videos are fine (limit 2 GB per file by default, and the app refuses a file that will not fit on
+the disk). Files get random names, and the audience never sees a file name. You can also link to a
+file or a YouTube video by URL; an uploaded file is safer for a live show because a link needs
+internet at the venue.
+
+For video and audio you can set where the clip starts and ends.
+
+### Order, or topic choice
+
+Before each flight choose **Next in order** (the first unplayed slot) or **A contestant picks the
+topic**. For a topic pick you can show the topics on the projector, select who is choosing, then
+select the topic they say. The app draws an unused, published question from that topic at the
+difficulty for that stage of the journey (by default destinations 1 to 10 are easy, 11 to 20
+medium, 21 to 30 hard; change this in Settings). A topic with nothing eligible is disabled and
+says why. After the flight you still press Show question and Start timer yourself.
+
+## Everyone eliminated: MAYDAY! Save the flight!
+
+There is no scheduled rescue. A rescue only becomes possible when the last contestant is
+eliminated. Then the show stops in `ALL_ELIMINATED`: the projector shows the emergency screen and
+the dashboard shows **START RESCUE MISSION**. Nothing else happens until you choose.
+
+1. Pick one to three eliminated contestants as the rescue crew, and start the mission.
+2. Show the route map: three checkpoints are missing.
+3. For each checkpoint: reveal the clue, record **Correct**, **Wrong** or **Skip**. Start, pause
+   and resume the 90-second rescue clock yourself.
+4. Reveal the result. You can change any clue's result before you apply it.
+5. Return contestants: everyone, a random draw, or your own picks, depending on the result.
+
+Default results (change them in the **Rescue** tab): three correct returns everyone, two returns
+half (rounded up), one returns up to three, zero returns nobody.
+
+When nobody returns you can **retry the rescue** or use the **emergency rule** you set in advance.
+An **emergency return** (you pick who comes back) is always available, so the show can never be
+stuck with nobody in the game. Only eliminated contestants can ever be picked.
+
+After a rescue the journey continues with the next unplayed question. The question that caused the
+wipe-out is not replayed.
+
+Rescue clues live in the **Rescue** tab, separate from the 30 main questions. Add more than three
+so a retry gets fresh ones.
+
+## Rehearsing
+
+- **Demo rehearsal** (switch at the top right) is a separate workspace with 12 sample questions
+  covering all four presentation types, and 6 rescue clues. It has its own roster and show state
+  and never mixes with your live questions. The projector shows a "Rehearsal" ribbon.
+- **Settings, Preview the flight** plays the animation (one flight, or a tour of all 30
+  destinations) under a "Preview" banner. It works with an empty question bank.
+
+## Your data
+
+Everything is saved as you go in the `data/` folder next to the app: questions, rescue clues,
+settings, uploaded media, and the state of the show itself. Closing the browser, refreshing, or
+restarting the app loses nothing; a show interrupted mid-question resumes mid-question. To back up
+or move a show, copy the `data/` folder. `data/live` is your show, `data/demo` is the rehearsal set.
+
+## Tests
+
+```bash
+npm test          # the rules of the show (25 tests, no browser needed)
+npm run test:e2e  # the 20 acceptance scenarios in a real browser
+```
+
+The second needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`).
+It starts its own server with a throwaway data folder.
+
+## How it is built
+
+- `server/` is a small Node server with no dependencies. It holds the one authoritative show state,
+  saves every change to disk, and pushes updates to both screens.
+- `shared/engine.mjs` is the state machine: every rule above is a few lines there, and
+  `tests/engine.test.mjs` exercises each one.
+- `public/js/projector/world.js` is the 3D journey (three.js). All artwork is built in code.
+- `public/js/host/` is the dashboard (Preact, no build step).
+
+Bundled open-source pieces, with their licence files in `public/vendor/`: three.js (MIT),
+Preact (MIT), htm (Apache 2.0), and the typefaces Bricolage Grotesque and DM Mono (SIL Open Font
+License 1.1).
+
+## Assumptions and limits
+
+This repository started empty, so anything defined only in an earlier written spec was built to
+the standard reading:
+
+- **Elimination:** after the answer is revealed, the host ticks everyone who got it wrong, and
+  those contestants are out.
+- **Roster:** the host types names (or adds numbered contestants) before the first flight.
+- **Finale:** the host ends the journey when ready; everyone still in the game is a champion.
+
+Known limits:
+
+- YouTube links are supported in code but could not be tested where this was built (no access to
+  YouTube). Test one at your venue, or upload the file instead.
+- Which video formats play depends on the browser showing the projector. MP4 (H.264) plays in
+  current Chrome, Edge and Safari. WebM plays there too, in Safari from version 14.1. Check each
+  clip with the editor's preview on the show computer.
+- The bundled display typeface covers Latin scripts. Other scripts (Korean, Japanese, Chinese and
+  so on) are shown in the computer's own fonts.
+- The bank has exactly 30 slots, one per destination.

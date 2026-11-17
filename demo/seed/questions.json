@@ -1,0 +1,183 @@
+[
+ {
+  "country": "Japan",
+  "topic": "Geography",
+  "difficulty": "easy",
+  "text": "What is the capital city of Japan?",
+  "answerFormat": "choice",
+  "choices": [
+   "Osaka",
+   "Kyoto",
+   "Tokyo",
+   "Nagoya"
+  ],
+  "correctChoice": 2,
+  "explanation": "Tokyo is the capital of Japan."
+ },
+ {
+  "country": "Brazil",
+  "topic": "Language",
+  "difficulty": "easy",
+  "text": "What is the official language of Brazil?",
+  "answerFormat": "written",
+  "correctAnswer": "Portuguese",
+  "variants": [
+   "Português",
+   "Brazilian Portuguese"
+  ],
+  "explanation": "Brazil is the largest Portuguese-speaking country in the world."
+ },
+ {
+  "country": "Italy",
+  "topic": "Flags",
+  "difficulty": "easy",
+  "text": "Which country flies this flag?",
+  "presentation": "image",
+  "media": {
+   "src": "/media/demo/d01.svg",
+   "name": "d01.svg",
+   "mime": "image/svg+xml",
+   "fit": "contain"
+  },
+  "answerFormat": "choice",
+  "choices": [
+   "Ireland",
+   "Italy",
+   "Mexico",
+   "Hungary"
+  ],
+  "correctChoice": 1,
+  "explanation": "Italy's flag has three equal vertical bands: green at the pole side, then white, then red.",
+  "hostNotes": "Demo image question."
+ },
+ {
+  "country": "Egypt",
+  "topic": "Geography",
+  "difficulty": "easy",
+  "text": "Which river flows through Cairo?",
+  "answerFormat": "written",
+  "correctAnswer": "The Nile",
+  "variants": [
+   "Nile",
+   "Nile River",
+   "River Nile"
+  ],
+  "explanation": "Cairo, the capital of Egypt, lies on the banks of the Nile."
+ },
+ {
+  "country": "France",
+  "topic": "Music",
+  "difficulty": "easy",
+  "text": "This nursery melody comes from which country?",
+  "presentation": "audio",
+  "media": {
+   "src": "/media/demo/d03.mp3",
+   "name": "d03.mp3",
+   "mime": "audio/mpeg"
+  },
+  "answerFormat": "choice",
+  "choices": [
+   "Spain",
+   "Poland",
+   "France",
+   "Sweden"
+  ],
+  "correctChoice": 2,
+  "explanation": "The tune is Frère Jacques, a nursery rhyme of French origin.",
+  "hostNotes": "Demo audio question. Press Play, let it finish, then start the timer."
+ },
+ {
+  "country": "India",
+  "topic": "Landmarks",
+  "difficulty": "easy",
+  "text": "In which Indian city does the Taj Mahal stand?",
+  "answerFormat": "written",
+  "correctAnswer": "Agra",
+  "explanation": "The Taj Mahal is a white marble mausoleum in Agra, built between 1631 and 1648."
+ },
+ {
+  "country": "Germany",
+  "topic": "Flags",
+  "difficulty": "easy",
+  "text": "Which country's flag is being painted?",
+  "presentation": "video",
+  "media": {
+   "src": "/media/demo/d02.webm",
+   "name": "d02.webm",
+   "mime": "video/webm",
+   "fit": "contain"
+  },
+  "answerFormat": "written",
+  "correctAnswer": "Germany",
+  "variants": [
+   "Deutschland"
+  ],
+  "explanation": "Germany's flag has three equal horizontal bands: black, red and gold.",
+  "hostNotes": "Demo video question. The clip is 8 seconds."
+ },
+ {
+  "country": "Australia",
+  "topic": "Geography",
+  "difficulty": "easy",
+  "text": "What is the capital city of Australia?",
+  "answerFormat": "choice",
+  "choices": [
+   "Sydney",
+   "Melbourne",
+   "Canberra",
+   "Perth"
+  ],
+  "correctChoice": 2,
+  "explanation": "Canberra is the capital of Australia."
+ },
+ {
+  "country": "Peru",
+  "topic": "Landmarks",
+  "difficulty": "easy",
+  "text": "Machu Picchu is in which country?",
+  "answerFormat": "choice",
+  "choices": [
+   "Chile",
+   "Peru",
+   "Bolivia",
+   "Ecuador"
+  ],
+  "correctChoice": 1,
+  "explanation": "Machu Picchu is a 15th-century Inca citadel in the Andes of southern Peru."
+ },
+ {
+  "country": "South Korea",
+  "topic": "Language",
+  "difficulty": "easy",
+  "text": "What is the name of the Korean alphabet?",
+  "answerFormat": "written",
+  "correctAnswer": "Hangul",
+  "variants": [
+   "Hangeul",
+   "한글"
+  ],
+  "explanation": "Hangul is the native script of Korea, credited to King Sejong."
+ },
+ {
+  "country": "Kenya",
+  "topic": "Geography",
+  "difficulty": "medium",
+  "text": "What is the capital city of Kenya?",
+  "answerFormat": "written",
+  "correctAnswer": "Nairobi",
+  "explanation": "Nairobi is the capital of Kenya."
+ },
+ {
+  "country": "Canada",
+  "topic": "Flags",
+  "difficulty": "medium",
+  "text": "What kind of leaf sits at the centre of Canada's flag?",
+  "answerFormat": "written",
+  "correctAnswer": "Maple leaf",
+  "variants": [
+   "Maple",
+   "A maple leaf"
+  ],
+  "explanation": "Canada's flag carries one stylized red maple leaf on a white square."
+ }
+]
