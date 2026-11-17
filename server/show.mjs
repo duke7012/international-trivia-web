@@ -4,7 +4,7 @@
 import { projectorView, hostView } from "./views.mjs";
 import { WORKSPACES, newId } from "./bank.mjs";
 import { reduce, due, ShowError, ACTIONS, PREVIEW_SAFE_PHASES, idleMedia, mediaReduce } from "../shared/engine.mjs";
-import { TOTAL_STOPS, emptyQuestion, normalizeQuestion, isBlank, publishErrors, normalizeSettings, normalizeRescue, normalizeSounds } from "../shared/schema.mjs";
+import { TOTAL_STOPS, MAX_QUESTIONS, emptyQuestion, normalizeQuestion, isBlank, publishErrors, normalizeSettings, normalizeRescue, normalizeSounds } from "../shared/schema.mjs";
 
 const ROSTER_ONLY = ["addContestants", "renameContestant", "removeContestant", "setContestantStatus"];
 const fail = (msg) => { throw new ShowError(msg); };
@@ -42,23 +42,34 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       store.save(ws, "questions");
       return { question: q };
     },
+    "bank.add"(ws) {
+      if (ws.questions.length >= MAX_QUESTIONS) fail(`The bank holds at most ${MAX_QUESTIONS} questions.`);
+      ws.questions.push(emptyQuestion(newId()));
+      store.save(ws, "questions");
+      return { id: ws.questions.at(-1).id, slot: ws.questions.length };
+    },
     "bank.clear"(ws, { id }) {
       const i = slotOf(ws, id);
       if (onStage(ws, id)) fail("This question is on stage right now and cannot be deleted.");
-      ws.questions[i] = emptyQuestion(newId());
+      // A journey slot (1 to 30) goes back to "Not configured"; an extra slot is removed.
+      if (i < TOTAL_STOPS) ws.questions[i] = emptyQuestion(newId());
+      else ws.questions.splice(i, 1);
       store.save(ws, "questions");
     },
     "bank.duplicate"(ws, { id }) {
       const src = ws.questions[slotOf(ws, id)];
-      const to = ws.questions.findIndex((q) => q.status === "empty");
-      if (to < 0) fail("All 30 slots are in use. Delete a question to make room for a copy.");
+      let to = ws.questions.findIndex((q) => q.status === "empty");
+      if (to < 0) {
+        if (ws.questions.length >= MAX_QUESTIONS) fail(`The bank holds at most ${MAX_QUESTIONS} questions. Delete one to make room for a copy.`);
+        to = ws.questions.push(emptyQuestion(newId())) - 1;
+      }
       ws.questions[to] = { ...structuredClone(src), id: newId(), status: "draft", updatedAt: now() };
       store.save(ws, "questions");
       return { id: ws.questions[to].id, slot: to + 1 };
     },
     "bank.move"(ws, { id, to }) {
       const from = slotOf(ws, id);
-      const dest = Math.max(0, Math.min(TOTAL_STOPS - 1, Number(to) | 0));
+      const dest = Math.max(0, Math.min(ws.questions.length - 1, Number(to) | 0));
       const [q] = ws.questions.splice(from, 1);
       ws.questions.splice(dest, 0, q);
       store.save(ws, "questions");

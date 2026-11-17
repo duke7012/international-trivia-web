@@ -174,11 +174,15 @@ legend { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 6px;
 .slots { list-style: none; margin: 0; padding: 0; overflow: auto; display: grid; gap: 4px; }
 .slot button { width: 100%; display: flex; gap: 10px; align-items: flex-start; text-align: left; background: var(--bg); border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; cursor: pointer; }
 .slot.selected button { border-color: var(--gold); background: var(--panel-2); }
-.slot-num { font: 500 15px var(--mono); width: 2ch; color: var(--gold); padding-top: 1px; }
+.slot-num { font: 500 15px var(--mono); width: 3ch; flex: none; text-align: right; color: var(--gold); padding-top: 1px; }
 .slot.empty .slot-num, .slot.empty .slot-text { color: var(--muted); }
 .slot-main { display: grid; gap: 3px; min-width: 0; }
 .slot-text { font-weight: 600; line-height: 1.25; }
 .slot-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
+.extra-divider { display: grid; gap: 2px; padding: 12px 10px 6px; margin-top: 6px; border-top: 1px solid var(--line); }
+.extra-divider b { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--gold); }
+.extra-divider span { font-size: 12px; color: var(--muted); }
+.add-slot { margin-top: 10px; align-self: flex-start; }
 .editor-head h2 { font-size: 20px; display: flex; align-items: center; gap: 8px; }
 .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 46%); gap: 16px; align-items: start; margin-top: 10px; }
 .editor > .callout { margin-bottom: 6px; }

@@ -151,6 +151,11 @@ server's deadline, not restarted.
 The app starts with **30 empty slots, each marked "Not configured"**. Nothing is preloaded. In the
 **Questions** tab you can write, edit, delete, duplicate and reorder questions.
 
+Slots 1 to 30 are the journey: **Next in order** plays them in turn. **Add a question** adds slots
+past 30 (up to 200 in all), shown under **Extra questions**. Those are only ever played when a
+contestant picks a topic, so a bigger bank gives every topic more to draw from. Deleting an extra
+question removes its slot; deleting a journey question sets it back to "Not configured".
+
 - **Presentation type** (separate from answer format): text only, image + text, video + text,
   audio + text.
 - **Answer format:** multiple choice with four options, or a written answer with accepted

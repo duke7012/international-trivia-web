@@ -2,6 +2,9 @@
 // Imported by the server and by the host dashboard, so both agree on what "ready to publish" means.
 
 export const TOTAL_STOPS = 30;
+// The bank always has the 30 journey slots, and can grow past them: slots 31 and up are an extra
+// pool that is only ever played when a contestant picks a topic ("Next in order" never gets that far).
+export const MAX_QUESTIONS = 200;
 export const PRESENTATIONS = ["text", "image", "video", "audio"];
 export const ANSWER_FORMATS = ["choice", "written"];
 export const DIFFICULTIES = ["easy", "medium", "hard"];
