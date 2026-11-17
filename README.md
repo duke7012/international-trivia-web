@@ -25,7 +25,7 @@ The dashboard tells you if the projector's sound is not on yet.
 
 The show runs with no internet connection. Fonts, the 3D engine and all sounds are bundled.
 
-### Host on one device, projector on another
+### Host on one device, projector on another (same network)
 
 By default the app only answers on the computer it runs on. To open the dashboard from a second
 device on the same network:
@@ -34,9 +34,48 @@ device on the same network:
 HOST=0.0.0.0 node server/server.mjs
 ```
 
-The server prints its network address and a **host PIN**. The dashboard asks for the PIN, so the
-audience cannot open it. Set your own with `HOST_PIN=123456`. Other options: `PORT` (default 4173),
-`DATA_DIR` (where show data is saved), `MAX_UPLOAD_MB` (default 2048).
+The server prints its network address and a **host PIN** for that run. The dashboard asks for it,
+so the audience cannot open it. To choose your own, set `HOST_PASSWORD` (at least 10 characters).
+
+### Host it online
+
+The app can run permanently on a hosting service, so the host and the projector only need a
+browser and an internet connection. It needs a host that offers:
+
+- one always-on Node.js web service (not "serverless", and not a free plan that goes to sleep),
+- a permanent disk for the `data` folder (questions, show state, uploaded media),
+- exactly one running copy. The show's state lives in that one process.
+
+This repository includes `render.yaml`, a ready-made setup for [Render](https://render.com):
+
+1. Create a Render account and add a payment method (a permanent disk needs a paid plan).
+2. In Render choose **New**, then **Blueprint**, and connect this GitHub repository.
+3. When asked for `HOST_PASSWORD`, type a phrase of at least 10 characters. This is what you will
+   type to open the dashboard. It is stored in Render, never in the repository.
+4. Apply. When the deploy finishes, Render shows the address, for example
+   `https://golden-bell.onrender.com`. Open `/host` for the dashboard and `/projector` for the
+   audience screen.
+
+Any other host works with the same settings: run `node server/server.mjs` with `HOST=0.0.0.0`,
+`PUBLIC_HOSTING=1`, `HOST_PASSWORD` set, `DATA_DIR` pointing at the permanent disk, and `PORT` set
+to whatever port the host expects. The health check address is `/healthz`.
+
+Things to know about running online:
+
+- **Sign-in.** The dashboard asks for the host password once per browser and remembers it for 30
+  days. Eight wrong tries from one address lock sign-in from that address for up to ten minutes.
+- **The projector address is public.** Anyone who has it can watch the audience screen. They still
+  never receive a question before you show it or an answer before you reveal it.
+- **The venue needs internet.** If the connection drops, both screens show "Reconnecting" and catch
+  up by themselves when it returns. For a venue with unreliable internet, run it on the laptop.
+- **Deploys restart the app.** Pushing new code makes the service restart, which takes the show
+  offline briefly. The show resumes exactly where it was. Do not push changes during an event.
+- **Disk size.** The setup file asks for 5 GB. Uploaded videos count against it; you can enlarge
+  the disk in Render later.
+- **Back up before an important show.** Your content lives on that one disk.
+
+Other options: `PORT` (default 4173), `DATA_DIR` (where show data is saved), `MAX_UPLOAD_MB`
+(default 2048).
 
 ## How one question runs
 
@@ -146,7 +185,7 @@ or move a show, copy the `data/` folder. `data/live` is your show, `data/demo` i
 ## Tests
 
 ```bash
-npm test          # the rules of the show (25 tests, no browser needed)
+npm test          # the rules of the show and the sign-in (33 tests, no browser needed)
 npm run test:e2e  # the 20 acceptance scenarios in a real browser
 ```
 

@@ -99,14 +99,16 @@ export function MediaPlayer({ media, kind, mstate, silent, onEnded }) {
     if (media.youtube) {
       const p = yt.current; if (!p?.ready) return;
       mute ? p.mute() : p.unMute();
-      if (st.status === "playing") { p.seekTo(want, true); p.playVideo(); } else { p.pauseVideo(); if (st.status !== "ended") p.seekTo(want, true); }
+      if (st.status === "playing") { p.seekTo(want, true); p.playVideo(); } else if (st.status !== "ended") { p.pauseVideo(); p.seekTo(want, true); }
       return;
     }
     const el = ref.current; if (!el) return;
     el.muted = mute;
     const seek = (tol) => { if (Math.abs(el.currentTime - want) > tol) { try { el.currentTime = want; } catch { /* metadata not loaded yet */ } } };
     if (st.status === "playing") { seek(0.4); el.play().catch(() => { el.muted = true; el.play().catch(() => {}); }); }
-    else { el.pause(); if (st.status !== "ended") seek(0.05); }
+    // "ended" is only a report that a clip finished. It never stops a clip, so a false report
+    // from elsewhere cannot interrupt the projector.
+    else if (st.status !== "ended") { el.pause(); seek(0.05); }
   };
   useEffect(apply, [st.n, st.status, silent, media.src]);
 

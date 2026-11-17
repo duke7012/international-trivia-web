@@ -16,9 +16,14 @@ async function syncClock() {
   }
 }
 
-const pinKey = "gb-host-pin";
-export const getPin = () => sessionStorage.getItem(pinKey) || "";
-export const setPin = (p) => sessionStorage.setItem(pinKey, p);
+// Sign in to the host dashboard. The server answers with a cookie the browser keeps, so the
+// password is never stored by this page or put in a web address.
+export async function signIn(password) {
+  let res;
+  try { res = await fetch("/api/host/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) }); }
+  catch { throw new Error("The show server is not answering."); }
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Sign-in failed.");
+}
 
 // Keeps a live connection open and calls onState with every update. The browser reconnects by
 // itself, and the server sends the full current state on every (re)connection, so a refreshed
@@ -30,7 +35,6 @@ export function connect(role, { onState, onStatus, monitor = false, cid = "" }) 
     const q = new URLSearchParams({ role });
     if (monitor) q.set("monitor", "1");
     if (cid) q.set("cid", cid);
-    if (role === "host" && getPin()) q.set("pin", getPin());
     es = new EventSource(`/api/events?${q}`);
     es.addEventListener("state", (e) => {
       const view = JSON.parse(e.data);
@@ -42,9 +46,9 @@ export function connect(role, { onState, onStatus, monitor = false, cid = "" }) 
     es.onerror = async () => {
       onStatus?.("offline");
       if (role === "host" && es.readyState === EventSource.CLOSED) {
-        // A closed (not retrying) connection usually means the PIN was refused.
-        const r = await fetch("/api/host/check", { headers: { "x-host-pin": getPin() } }).catch(() => null);
-        if (r && r.status === 401) { onStatus?.("pin"); return; }
+        // A closed (not retrying) connection usually means the host is not signed in.
+        const r = await fetch("/api/host/check").catch(() => null);
+        if (r && r.status === 401) { onStatus?.("signin"); return; }
         setTimeout(open, 1500);
       }
     };
@@ -56,7 +60,7 @@ export function connect(role, { onState, onStatus, monitor = false, cid = "" }) 
 export async function act(type, payload = {}) {
   let res;
   try {
-    res = await fetch("/api/host/action", { method: "POST", headers: { "content-type": "application/json", "x-host-pin": getPin() }, body: JSON.stringify({ type, payload }) });
+    res = await fetch("/api/host/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type, payload }) });
   } catch { throw new Error("The show server is not answering. Check that it is still running."); }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body.error || "That did not work."), { errors: body.errors, status: res.status });
@@ -68,7 +72,6 @@ export function upload(file, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", `/api/host/upload?name=${encodeURIComponent(file.name)}`);
-    xhr.setRequestHeader("x-host-pin", getPin());
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
     xhr.onload = () => {
       let body = {};

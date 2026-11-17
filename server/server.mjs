@@ -5,17 +5,20 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import crypto from "node:crypto";
 import { ROOT, DATA, WORKSPACES, openStore, mediaDir, newId, sweepMedia } from "./store.mjs";
 import { projectorView, hostView } from "./views.mjs";
+import { secretFromEnv, createAuth } from "./auth.mjs";
 import { reduce, due, ShowError, ACTIONS, PREVIEW_SAFE_PHASES, idleMedia, mediaReduce } from "../shared/engine.mjs";
 import { TOTAL_STOPS, emptyQuestion, normalizeQuestion, isBlank, publishErrors, normalizeSettings, normalizeRescue, mediaKind } from "../shared/schema.mjs";
 
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "127.0.0.1";
 const LOOPBACK = ["127.0.0.1", "localhost", "::1"].includes(HOST);
-// Off the laptop itself, the dashboard is protected by a PIN so the audience cannot open it.
-const PIN = process.env.HOST_PIN || (LOOPBACK ? null : String(crypto.randomInt(100000, 999999)));
+// Off the laptop itself, the dashboard is protected by a password (or a PIN on a local network).
+let access;
+try { access = secretFromEnv(process.env, LOOPBACK); } catch (e) { console.error(`\n  Cannot start: ${e.message}\n`); process.exit(1); }
+const auth = createAuth(access.secret);
+const MAX_SCREENS = 300; // open live connections, so a flood of visitors cannot exhaust the server
 const MAX_UPLOAD = Number(process.env.MAX_UPLOAD_MB || 2048) * 1024 * 1024;
 
 const store = openStore();
@@ -31,7 +34,7 @@ function projectorStatus() {
 function viewFor(role) {
   const ws = store.current, now = Date.now();
   if (role === "projector") return projectorView(ws, preview, now);
-  return hostView(ws, { projector: projectorStatus(), preview: preview && { kind: preview.kind, number: preview.number, media: preview.media, presentation: preview.question?.presentation }, pinRequired: !!PIN }, now);
+  return hostView(ws, { projector: projectorStatus(), preview: preview && { kind: preview.kind, number: preview.number, media: preview.media, presentation: preview.question?.presentation }, signInRequired: auth.required }, now);
 }
 function broadcast(only) {
   const cache = {};
@@ -217,18 +220,22 @@ function upload(req, res, url) {
   });
 }
 
-const pinOk = (req, url) => !PIN || req.headers["x-host-pin"] === PIN || url.searchParams.get("pin") === PIN;
+const SIGN_IN = { error: "Sign in to use the host dashboard." };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const p = decodeURIComponent(url.pathname);
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("x-frame-options", "SAMEORIGIN"); // the dashboard embeds the projector; nobody else may
+  res.setHeader("referrer-policy", "no-referrer");
   try {
     // Another website open in the host's browser must not be able to drive the show.
     if (req.method !== "GET" && req.method !== "HEAD" && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return json(res, 403, { error: "Cross-site request refused." });
 
     if (p === "/api/events") {
       const role = url.searchParams.get("role") === "host" ? "host" : "projector";
-      if (role === "host" && !pinOk(req, url)) return json(res, 401, { error: "PIN required" });
+      if (role === "host" && !auth.allowed(req)) return json(res, 401, SIGN_IN);
+      if (clients.size >= MAX_SCREENS) return json(res, 503, { error: "Too many screens are connected." });
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
       const client = { res, role, monitor: url.searchParams.has("monitor"), cid: url.searchParams.get("cid") || "", sound: false };
       clients.add(client);
@@ -238,7 +245,16 @@ const server = http.createServer(async (req, res) => {
       if (role === "projector") broadcast("host");
       return;
     }
-    if (p === "/api/time") return json(res, 200, { now: Date.now() });
+    if (p === "/api/time" || p === "/healthz") return json(res, 200, { now: Date.now() });
+
+    if (p === "/api/host/login" && req.method === "POST") {
+      const { password } = await readBody(req, 2000);
+      const r = auth.login(req, password);
+      if (r.ok) { const c = auth.setCookie(req); if (c) res.setHeader("set-cookie", c); return json(res, 200, { ok: true }); }
+      if (r.locked) return json(res, 429, { error: `Too many wrong tries. Try again in ${Math.ceil(r.retryAfter / 60)} minute${r.retryAfter > 60 ? "s" : ""}.` });
+      return json(res, 401, { error: `That ${access.kind || "password"} is not right.` });
+    }
+    if (p === "/api/host/logout" && req.method === "POST") { const c = auth.clearCookie(req); if (c) res.setHeader("set-cookie", c); return json(res, 200, { ok: true }); }
 
     if (p === "/api/projector/status" && req.method === "POST") {
       const body = await readBody(req, 2000);
@@ -257,7 +273,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p.startsWith("/api/host/")) {
-      if (!pinOk(req, url)) return json(res, 401, { error: "PIN required" });
+      if (!auth.allowed(req)) return json(res, 401, { ...SIGN_IN, kind: access.kind });
       if (p === "/api/host/action" && req.method === "POST") {
         const { type, payload } = await readBody(req);
         return json(res, 200, { ok: true, ...act(String(type), payload) });
@@ -295,7 +311,12 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  Golden Bell: Around the World is running.\n\n  Host dashboard   ${base}/host\n  Projector        ${base}/projector\n`);
   if (!LOOPBACK) {
     const ips = Object.values(os.networkInterfaces()).flat().filter((n) => n && n.family === "IPv4" && !n.internal).map((n) => n.address);
-    console.log(`  On your network  ${ips.map((ip) => `http://${ip}:${PORT}`).join("  ") || "(no network address found)"}\n  Host PIN         ${PIN}\n`);
+    console.log(`  On your network  ${ips.map((ip) => `http://${ip}:${PORT}`).join("  ") || "(no network address found)"}`);
+    console.log(access.generated ? `  Host PIN         ${access.secret}   (for this run; set HOST_PASSWORD to choose your own)\n` : `  The host dashboard asks for your ${access.kind}.\n`);
   }
   console.log(`  Show data is saved in ${DATA}. Press Ctrl+C to stop.\n`);
 });
+
+// Hosting platforms stop the app with SIGTERM when they deploy or restart. Every change is
+// already on disk, so there is nothing to flush.
+for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => process.exit(0));

@@ -231,7 +231,7 @@ legend { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 6px;
 .savebar.dirty { border-color: var(--gold); color: var(--text); }
 
 .pin { max-width: 360px; margin: 14vh auto; display: grid; gap: 12px; }
-.pin input { font: 500 28px var(--mono); text-align: center; padding: 10px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+.pin input { font: 500 22px var(--mono); text-align: center; padding: 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); width: 100%; }
 
 @media (max-width: 1180px) { .show { grid-template-columns: 1fr; } .editor-grid { grid-template-columns: 1fr; } .preview-box { position: static; } }
 @media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } .questions { grid-template-columns: 1fr; } .slots-panel { position: static; max-height: 300px; } .grid3, .grid2 { grid-template-columns: 1fr; } .top { flex-wrap: wrap; } }

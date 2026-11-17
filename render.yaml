@@ -1,0 +1,24 @@
+# Render Blueprint: hosts Golden Bell online as one always-on web service with a permanent disk.
+# In Render choose New > Blueprint, pick this repository, and enter a host password when asked.
+services:
+  - type: web
+    name: golden-bell
+    runtime: node
+    # No "plan" line on purpose: Render then uses its smallest paid instance, which is enough
+    # for this app and is the smallest that can have a permanent disk.
+    buildCommand: node --version
+    startCommand: node server/server.mjs
+    healthCheckPath: /healthz
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC_HOSTING
+        value: "1"
+      - key: DATA_DIR
+        value: /var/data
+      - key: HOST_PASSWORD
+        sync: false # you type this in Render; it is never stored in the repository
+    disk:
+      name: show-data
+      mountPath: /var/data
+      sizeGB: 5

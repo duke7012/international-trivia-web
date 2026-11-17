@@ -1,6 +1,6 @@
 // Host dashboard shell: tabs, live connection, notices, and the live/demo switch.
 import { html, render, useEffect, useState } from "/vendor/preact/htm-preact.module.js";
-import { connect, setPin } from "../net.js";
+import { connect, signIn } from "../net.js";
 import { run, onNotice } from "./ui.js";
 import { ShowTab } from "./show.js";
 import { QuestionsTab } from "./editor.js";
@@ -14,6 +14,7 @@ function App() {
   const [tab, setTab] = useState(() => (TABS.some(([k]) => k === location.hash.slice(1)) ? location.hash.slice(1) : "show"));
   const [notice, setNotice] = useState(null);
   const [conn, setConn] = useState(null);
+  const [signInError, setSignInError] = useState("");
 
   useEffect(() => {
     onNotice(setNotice);
@@ -22,10 +23,17 @@ function App() {
   useEffect(() => { history.replaceState(null, "", "#" + tab); }, [tab]);
   useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(null), notice.kind === "error" ? 9000 : 4000); return () => clearTimeout(t); }, [notice]);
 
-  if (status === "pin") {
-    return html`<form class="pin" onSubmit=${(e) => { e.preventDefault(); setPin(new FormData(e.target).get("pin")); setStatus("connecting"); conn.reconnect(); }}>
-      <h1>Host PIN</h1><p>This dashboard is shared on the network, so it asks for the PIN printed in the show server's window.</p>
-      <input name="pin" inputmode="numeric" autocomplete="off" autofocus /><button class="btn primary">Open the dashboard</button>
+  if (status === "signin") {
+    const submit = async (e) => {
+      e.preventDefault();
+      try { await signIn(new FormData(e.target).get("password")); setSignInError(""); setStatus("connecting"); conn.reconnect(); }
+      catch (err) { setSignInError(err.message); }
+    };
+    return html`<form class="pin" onSubmit=${submit} data-testid="signin">
+      <h1>Host sign-in</h1><p>Only the host can open this dashboard. Enter the host password (or the PIN shown in the show server's window).</p>
+      <input name="password" type="password" autocomplete="current-password" autofocus aria-label="Host password" data-testid="signin-password" />
+      ${signInError && html`<p class="form-error" role="alert" data-testid="signin-error">${signInError}</p>`}
+      <button class="btn primary" data-testid="signin-submit">Open the dashboard</button>
     </form>`;
   }
   if (!view) return html`<p class="loading">Connecting to the show server…</p>`;
