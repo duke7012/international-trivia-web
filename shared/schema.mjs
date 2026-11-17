@@ -175,6 +175,7 @@ export const SOUND_CUES = [
   { id: "congrats", label: "After the correct answer", when: "Plays straight after the one above.", match: /congratulations/i },
   { id: "elimination", label: "Checking eliminations", when: "Loops while you mark who is out.", match: /contestant_elimination|elimination/i },
   { id: "rescueGame", label: "Rescue game", when: "Loops while the rescue game's rules are on the projector.", match: /rescue|mayday/i },
+  { id: "finale", label: "Finale", when: "Loops while the finale is on the projector.", match: /finale/i },
 ];
 export const cueForFile = (name) => SOUND_CUES.find((c) => c.match.test(name || ""))?.id || null;
 export const LATE_STAGE_STOP = 16; // from this destination on, the countdown uses the "drums" music

@@ -34,7 +34,7 @@ function sounds(prev, v) {
   if (to("BOARDS_UP") && !own("thinkOver", "boardsLoop")) play.boardsUp(v.sound.timer);
   if (to("ANSWER_REVEALED") && !own("revealLead", "correct")) play.reveal();
   if (to("ALL_ELIMINATED") && prev.phase !== "RESCUE") play.mayday();
-  if (to("FINISHED")) play.goldenBell();
+  if (to("FINISHED") && !own("finale")) play.goldenBell();
   if (v.lastRescue && !prev.lastRescue) play.fanfare();
   if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight" && !own("flight")) play.takeoff();
   // A new rescue game: the built-in alarm, unless the host has their own music for it.
