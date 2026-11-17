@@ -146,5 +146,5 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); 
 .ribbon.preview { top: 0; font-size: 1.7em; background: var(--gold); color: var(--ink); }
 .ribbon.demo { bottom: 0; top: auto; font-size: 1.25em; border-radius: 1em 1em 0 0; background: var(--ink); color: var(--paper); }
 .ribbon.offline { top: 0; font-size: 1.5em; background: var(--red); color: #fff; z-index: 10; }
-.arm { position: absolute; left: 50%; bottom: 1.2em; transform: translateX(-50%); z-index: 12; font: 600 1.5em var(--sans); border: 0; padding: .6em 1.4em; border-radius: 99em; background: var(--ink); color: var(--paper); cursor: pointer; box-shadow: 0 0 0 .2em var(--gold); }
+.arm { position: absolute; left: 50%; bottom: 4.2em; transform: translateX(-50%); z-index: 12; font: 600 1.5em var(--sans); border: 0; padding: .6em 1.4em; border-radius: 99em; background: var(--ink); color: var(--paper); cursor: pointer; box-shadow: 0 0 0 .2em var(--gold); }
 .monitor .arm { display: none; }

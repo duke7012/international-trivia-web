@@ -426,7 +426,7 @@ export function createWorld(canvas, { monitor = false } = {}) {
   }
 
   function frame(nowMs) {
-    const dt = Math.min(0.05, (nowMs - lastT) / 1000); lastT = nowMs; time += dt;
+    const dt = Math.min(0.1, (nowMs - lastT) / 1000); lastT = nowMs; time += dt;
 
     // where is the plane?
     let flying = false, speed = 0;
@@ -457,7 +457,7 @@ export function createWorld(canvas, { monitor = false } = {}) {
     body.position.y = 0.46 + (airborne > 0.05 ? Math.sin(time * 2.1) * 0.06 : 0);
 
     // emergency and finale blend in and out
-    emerg += ((state.mode === "emergency" ? 1 : 0) - emerg) * (1 - Math.exp(-dt * 2.5));
+    emerg += ((state.mode === "emergency" ? 1 : 0) - emerg) * (1 - Math.exp(-dt * (state.mode === "emergency" ? 2.5 : 5)));
     fin += ((state.mode === "finale" ? 1 : 0) - fin) * (1 - Math.exp(-dt * 1.5));
     const wantSpin = state.mode === "emergency" ? 0 : flying ? 1 : 0.22;
     spin += (wantSpin - spin) * (1 - Math.exp(-dt * 2));
@@ -498,9 +498,9 @@ export function createWorld(canvas, { monitor = false } = {}) {
       wantLook.copy(here.c).addScaledVector(here.s, -1.2); wantLook.y += 1.5;
     } else if (state.mode === "finale") {
       const a = time * 0.16;
-      wantPos.copy(here.c).addScaledVector(here.t, Math.cos(a) * 17).addScaledVector(here.s, Math.sin(a) * 17); wantPos.y += 4.5;
+      wantPos.copy(here.c).addScaledVector(here.t, Math.cos(a) * 20).addScaledVector(here.s, Math.sin(a) * 20); wantPos.y += 5;
       // look to one side of the bell, so it hangs in the right half of the screen, clear of the names
-      wantLook.copy(here.c).addScaledVector(here.t, Math.sin(a) * 6.5).addScaledVector(here.s, -Math.cos(a) * 6.5); wantLook.y += 5.2;
+      wantLook.copy(here.c).addScaledVector(here.t, -Math.sin(a) * 4.6).addScaledVector(here.s, Math.cos(a) * 4.6); wantLook.y += 5.4;
     } else {
       // landed and waiting: a slow drift around the island with the number in view
       wantPos.copy(here.c).addScaledVector(here.t, 12.5 + sway * 1.5).addScaledVector(here.s, 13 - sway * 1.2); wantPos.y += 7.4;
@@ -535,7 +535,7 @@ export function createWorld(canvas, { monitor = false } = {}) {
     trail.instanceMatrix.needsUpdate = true;
 
     // smoke
-    smoke.visible = emerg > 0.05;
+    smoke.visible = emerg > 0.05 && (state.mode === "emergency" || emerg > 0.4);
     if (smoke.visible) {
       for (let n = 0; n < SMOKE; n++) {
         const life = (time * 0.45 + n / SMOKE) % 1;

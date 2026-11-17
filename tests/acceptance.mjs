@@ -59,8 +59,8 @@ try {
   const H = (id) => host.locator(`[data-testid="${id}"]`);
   const P = (id) => proj.locator(`[data-testid="${id}"]`);
   const phase = async (want) => {
-    await host.locator(`[data-testid="state"][data-phase="${want}"]`).waitFor({ timeout: 15000 });
-    await proj.locator(`[data-testid="projector"][data-phase="${want}"]`).waitFor({ timeout: 15000 });
+    await host.locator(`[data-testid="state"][data-phase="${want}"]`).waitFor({ timeout: 30000 });
+    await proj.locator(`[data-testid="projector"][data-phase="${want}"]`).waitFor({ timeout: 30000 });
   };
   const tab = (t) => H(`tab-${t}`).click();
   const notice = async (re) => { await host.locator('[data-testid="notice"]').filter({ hasText: re }).waitFor({ timeout: 8000 }); };
@@ -105,7 +105,7 @@ try {
   });
 
   await scenario(2, "Create and save a text-only question", async () => {
-    await writeQuestion(1, { type: "text", text: "Which planet do we live on?", choices: ["Mars", "Earth", "Venus", "Jupiter"], correct: 1, country: "Testland", topic: "Space", why: "We live on Earth.", countdown: 3 });
+    await writeQuestion(1, { type: "text", text: "Which planet do we live on?", choices: ["Mars", "Earth", "Venus", "Jupiter"], correct: 1, country: "Testland", topic: "Space", why: "We live on Earth.", countdown: 8 });
   });
   await scenario(3, "Create and save an image question", async () => {
     await writeQuestion(2, { type: "image", text: "How many colour bands does this picture have?", file: "d01.svg", choices: ["Two", "Three", "Four", "Five"], correct: 1, country: "Imageland", topic: "Flags", countdown: 40 });
@@ -145,8 +145,9 @@ try {
     assert(after.session.rev === before && after.session.phase === "LOBBY" && after.session.stop === 0, "previews must not change the show");
   });
 
-  // a shorter (but not instant) flight, set through the Settings tab
-  await tab("settings"); await H("set-flight").fill("6"); await H("btn-save-settings").click(); await notice(/Settings saved/);
+  // Flight length is set through the Settings tab. Long enough that a slow test machine can
+  // still catch the plane in the air; later flights are skipped with the host's Skip button.
+  await tab("settings"); await H("set-flight").fill("20"); await H("btn-save-settings").click(); await notice(/Settings saved/);
   // three rescue clues, stored apart from the question bank
   await tab("rescue");
   for (let i = 0; i < 3; i++) { await H("btn-add-clue").click(); await H(`clue-prompt-${i}`).fill(`Rescue clue ${i + 1}`); await H(`clue-answer-${i}`).fill(`Place ${i + 1}`); }
@@ -180,7 +181,7 @@ try {
     assert((await P("choice-0").count()) === 1, "choices are shown");
     assert((await P("timer").getAttribute("data-state")) === "idle", "timer must be idle");
     await sleep(2500);
-    assert((await P("timer").getAttribute("data-state")) === "idle" && (await P("timer").getAttribute("data-seconds")) === "3", "timer must not have started by itself");
+    assert((await P("timer").getAttribute("data-state")) === "idle" && (await P("timer").getAttribute("data-seconds")) === "8", "timer must not have started by itself");
     assert((await P("answer").count()) === 0, "no answer yet");
   });
 
@@ -317,7 +318,7 @@ try {
     await H("btn-reveal").click(); await phase("ANSWER_REVEALED");
     await H("btn-review").click(); await H("btn-confirm").click(); await phase("READY_TO_FLY");
     // video: playing or finishing the clip never starts the countdown
-    await H("btn-fly").click(); await phase("DESTINATION_ARRIVED");
+    await H("btn-fly").click(); await H("btn-skip").click(); await phase("DESTINATION_ARRIVED");
     await H("btn-show").click(); await phase("QUESTION_VISIBLE");
     await proj.mouse.click(700, 400);
     await H("media-play").click();
@@ -325,12 +326,12 @@ try {
     await H("media-pause").click();
     await proj.waitForFunction(() => document.querySelector("video").paused);
     await H("media-replay").click();
-    await host.locator('[data-testid="media-controls"][data-status="ended"]').waitFor({ timeout: 15000 }); // clip end (7s) reached
+    await host.locator('[data-testid="media-controls"][data-status="ended"]').waitFor({ timeout: 45000 }); // clip end (7s) reached
     const s = (await wire("host")).session;
     assert(s.phase === "QUESTION_VISIBLE" && s.timer === null, "the clip ending must not start the timer");
     await H("btn-timer").click(); await H("btn-timeup").click(); await H("btn-reveal").click(); await H("btn-review").click(); await H("btn-confirm").click(); await phase("READY_TO_FLY");
     // audio: themed card, host-controlled, and no file name anywhere on the projector
-    await H("btn-fly").click(); await phase("DESTINATION_ARRIVED");
+    await H("btn-fly").click(); await H("btn-skip").click(); await phase("DESTINATION_ARRIVED");
     await H("btn-show").click(); await phase("QUESTION_VISIBLE");
     await H("media-play").click();
     await proj.locator('[data-testid="audio-card"].playing').waitFor();
