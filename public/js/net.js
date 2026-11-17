@@ -40,6 +40,7 @@ export function connect(role, { onState, onStatus, monitor = false, cid = "" }) 
       const view = JSON.parse(e.data);
       if (!sawState && Math.abs(view.now - clock.now()) > 1500) offset = view.now - Date.now();
       sawState = true;
+      if (view.upload) chunkBytes = view.upload.chunkBytes || 0;
       onStatus?.("online");
       onState(view);
     });
@@ -67,8 +68,46 @@ export async function act(type, payload = {}) {
   return body;
 }
 
-// Upload with progress. Streams to the show computer's disk, not into browser storage.
+// How this server takes uploads. Set from the host's state: 0 means one request for the whole
+// file; a number means the file goes up in pieces of that many bytes (needed on Cloudflare).
+let chunkBytes = 0;
+
+const sendPiece = (url, blob, onProgress) => new Promise((resolve, reject) => {
+  const xhr = new XMLHttpRequest();
+  xhr.open("PUT", url);
+  xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded);
+  xhr.onload = () => {
+    let body = {};
+    try { body = JSON.parse(xhr.responseText); } catch { /* fall through */ }
+    xhr.status === 200 ? resolve(body) : reject(Object.assign(new Error(body.error || "The upload failed."), { final: xhr.status < 500 }));
+  };
+  xhr.onerror = () => reject(new Error("The upload was interrupted. Check the connection and try again."));
+  xhr.send(blob);
+});
+
+async function uploadInPieces(file, onProgress) {
+  const call = async (url, init) => {
+    const res = await fetch(url, init).catch(() => { throw new Error("The upload was interrupted. Check the connection and try again."); });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || "The upload failed.");
+    return body;
+  };
+  const start = await call(`/api/host/upload/start?name=${encodeURIComponent(file.name)}&size=${file.size}`, { method: "POST" });
+  const parts = [];
+  for (let offset = 0, n = 1; offset < file.size; offset += start.chunkBytes, n++) {
+    const blob = file.slice(offset, offset + start.chunkBytes);
+    const url = `/api/host/upload/part?key=${encodeURIComponent(start.key)}&uploadId=${encodeURIComponent(start.uploadId)}&n=${n}`;
+    for (let attempt = 1; ; attempt++) { // a dropped piece is retried, not the whole file
+      try { parts.push(await sendPiece(url, blob, (sent) => onProgress?.((offset + sent) / file.size))); break; }
+      catch (e) { if (e.final || attempt >= 3) throw e; }
+    }
+  }
+  return call("/api/host/upload/finish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: start.key, uploadId: start.uploadId, parts, name: file.name }) });
+}
+
+// Upload with progress. Goes to the show server's storage, not into browser storage.
 export function upload(file, onProgress) {
+  if (chunkBytes) return uploadInPieces(file, onProgress);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", `/api/host/upload?name=${encodeURIComponent(file.name)}`);

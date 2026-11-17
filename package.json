@@ -10,6 +10,11 @@
   "scripts": {
     "start": "node server/server.mjs",
     "test": "node --test tests/engine.test.mjs tests/server.test.mjs",
-    "test:e2e": "node tests/acceptance.mjs"
+    "test:e2e": "node tests/acceptance.mjs",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.163.0"
   }
 }

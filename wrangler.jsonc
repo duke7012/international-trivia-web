@@ -1,0 +1,20 @@
+// Cloudflare setup for Golden Bell: Around the World.
+//   npm run cf:dev      run it locally the way Cloudflare runs it
+//   npm run cf:deploy   publish to your Cloudflare account
+{
+  "name": "golden-bell",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "build": { "command": "node cloudflare/build.mjs" },
+  // pages, scripts, fonts
+  "assets": { "directory": ".cloudflare/assets", "binding": "ASSETS" },
+  // the one object that holds the live show and saves it
+  "durable_objects": { "bindings": [{ "name": "ROOM", "class_name": "ShowRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ShowRoom"] }],
+  // uploaded images, video and audio
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "golden-bell-media" }],
+  "vars": { "MAX_UPLOAD_MB": "2048" },
+  "observability": { "enabled": true }
+  // The host password is a secret, never written here:  npx wrangler secret put HOST_PASSWORD
+}

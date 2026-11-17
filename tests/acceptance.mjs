@@ -20,18 +20,29 @@ const PORT = 4300 + Math.floor(Math.random() * 500);
 const BASE = `http://127.0.0.1:${PORT}`;
 const DATA = mkdtempSync(path.join(tmpdir(), "golden-bell-e2e-"));
 
+// TARGET=cloudflare runs the same scenarios against the Cloudflare version, served locally by
+// Cloudflare's own runtime (wrangler dev). It needs a .dev.vars file with HOST_PASSWORD, and
+// E2E_PASSWORD set to the same value so the run can sign in.
+const CLOUDFLARE = process.env.TARGET === "cloudflare";
+const PASSWORD = process.env.E2E_PASSWORD || "";
 let server;
 const startServer = () => new Promise((resolve, reject) => {
-  server = spawn(process.execPath, ["server/server.mjs"], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA, HOST: "127.0.0.1" } });
-  server.stdout.on("data", (d) => String(d).includes("is running") && resolve());
-  server.stderr.on("data", (d) => process.stderr.write(`[server] ${d}`));
+  server = CLOUDFLARE
+    ? spawn(path.join(ROOT, "node_modules", ".bin", "wrangler"), ["dev", "--port", String(PORT), "--ip", "127.0.0.1", "--persist-to", DATA, "--show-interactive-dev-session=false"], { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: "false" }, detached: true })
+    : spawn(process.execPath, ["server/server.mjs"], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA, HOST: "127.0.0.1" } });
+  let out = "";
+  const seen = (d) => { out += d; if (out.includes(CLOUDFLARE ? "Ready on" : "is running")) resolve(); };
+  server.stdout.on("data", seen);
+  server.stderr.on("data", (d) => (CLOUDFLARE ? seen(d) : process.stderr.write(`[server] ${d}`)));
   server.on("exit", (c) => c && reject(new Error(`server exited ${c}`)));
 });
-const stopServer = () => new Promise((r) => { server.once("exit", r); server.kill(); });
+// wrangler starts helper processes, so its whole group is stopped.
+const killServer = () => { try { CLOUDFLARE ? process.kill(-server.pid, "SIGTERM") : server.kill(); } catch { /* already gone */ } };
+const stopServer = () => new Promise((r) => { server.once("exit", () => setTimeout(r, CLOUDFLARE ? 1500 : 0)); killServer(); });
 
 // What the projector is actually sent over the wire (not just what it draws).
 async function wire(role = "projector") {
-  const res = await fetch(`${BASE}/api/events?role=${role}`);
+  const res = await fetch(`${BASE}/api/events?role=${role}`, { headers: PASSWORD ? { "x-host-pin": PASSWORD } : {} });
   const reader = res.body.getReader();
   let buf = "";
   while (!buf.includes("\n\n")) buf += Buffer.from((await reader.read()).value).toString();
@@ -84,6 +95,7 @@ try {
   }
 
   await host.goto(`${BASE}/host`); await proj.goto(`${BASE}/projector`);
+  if (PASSWORD) { await H("signin-password").fill(PASSWORD); await H("signin-submit").click(); }
   await H("state").waitFor(); await P("projector").waitFor();
   await proj.mouse.click(700, 400); // one click turns the projector's sound on
 
@@ -121,7 +133,7 @@ try {
     await host.reload(); await proj.reload(); await H("conn").waitFor(); await P("projector").waitFor();
     await tab("questions");
     assert((await host.locator('[data-testid^="slot-"][data-status="published"]').count()) === 4, "four published questions should survive refresh and restart");
-    assert(readdirSync(path.join(DATA, "live", "media")).length === 3, "three media files should be on disk");
+    if (!CLOUDFLARE) assert(readdirSync(path.join(DATA, "live", "media")).length === 3, "three media files should be on disk");
   });
 
   await scenario(6, "Preview all four presentation types, without moving the show", async () => {
@@ -341,7 +353,7 @@ try {
   });
 } finally {
   await browser.close();
-  if (server) server.kill();
+  if (server) killServer();
   rmSync(DATA, { recursive: true, force: true });
 }
 

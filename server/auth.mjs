@@ -3,6 +3,7 @@
 // On a network or online, the host signs in once with a password; the browser then holds a
 // cookie, so the password never travels in a web address. Wrong guesses are rate-limited.
 import crypto from "node:crypto";
+import { Buffer } from "node:buffer";
 
 const WINDOW_MS = 10 * 60 * 1000;
 const PER_ADDRESS = 8; // wrong tries from one address inside the window
@@ -22,8 +23,10 @@ export function secretFromEnv(env, loopback) {
   return { secret: null, kind: null, generated: false };
 }
 
-export function createAuth(secret, now = () => Date.now()) {
-  if (!secret) return { required: false, allowed: () => true, login: () => ({ ok: true }), setCookie: () => null, clearCookie: () => null };
+// `memory` lets a host that can be unloaded at any moment (Cloudflare) keep the record of wrong
+// tries somewhere durable: { state: { byAddress: {}, overall: [] }, save(state) }.
+export function createAuth(secret, now = () => Date.now(), memory = null) {
+  if (!secret) return { required: false, allowed: () => true, signedIn: () => true, login: () => ({ ok: true }), setCookie: () => null, clearCookie: () => null };
 
   const digest = (s) => crypto.createHmac("sha256", "golden-bell-compare").update(String(s)).digest();
   const want = digest(secret);
@@ -33,23 +36,24 @@ export function createAuth(secret, now = () => Date.now()) {
   const token = crypto.createHmac("sha256", String(secret)).update("golden-bell-host-session-v1").digest("hex");
   const tokenOk = (value) => typeof value === "string" && value.length === token.length && crypto.timingSafeEqual(Buffer.from(value), Buffer.from(token));
 
-  const byAddress = new Map(); // address -> times of wrong tries
-  let overall = [];
+  const state = memory?.state || { byAddress: {}, overall: [] }; // address -> times of wrong tries
+  state.byAddress ||= {}; state.overall ||= [];
   const recent = (list) => list.filter((t) => now() - t < WINDOW_MS);
   const lockedFor = (address) => {
-    overall = recent(overall);
-    const mine = recent(byAddress.get(address) || []);
-    mine.length ? byAddress.set(address, mine) : byAddress.delete(address);
-    const oldest = mine.length >= PER_ADDRESS ? mine[0] : overall.length >= OVERALL ? overall[0] : null;
+    state.overall = recent(state.overall);
+    const mine = recent(state.byAddress[address] || []);
+    if (mine.length) state.byAddress[address] = mine; else delete state.byAddress[address];
+    const oldest = mine.length >= PER_ADDRESS ? mine[0] : state.overall.length >= OVERALL ? state.overall[0] : null;
     return oldest === null ? 0 : Math.max(1, Math.ceil((oldest + WINDOW_MS - now()) / 1000));
   };
   const attempt = (address, value) => {
     const wait = lockedFor(address);
     if (wait) return { ok: false, locked: true, retryAfter: wait };
-    if (matches(value)) { byAddress.delete(address); return { ok: true }; }
-    overall.push(now());
-    byAddress.set(address, [...(byAddress.get(address) || []), now()]);
-    if (byAddress.size > 5000) byAddress.clear(); // never let the table grow without bound
+    if (matches(value)) { delete state.byAddress[address]; memory?.save(state); return { ok: true }; }
+    state.overall.push(now());
+    state.byAddress[address] = [...(state.byAddress[address] || []), now()];
+    if (Object.keys(state.byAddress).length > 5000) state.byAddress = {}; // never let the table grow without bound
+    memory?.save(state);
     return { ok: false, locked: false };
   };
 
@@ -60,11 +64,13 @@ export function createAuth(secret, now = () => Date.now()) {
     }
     return null;
   };
-  const secure = (req) => (String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https" || req.socket.encrypted ? "; Secure" : "");
+  const secure = (req) => (String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https" || req.socket?.encrypted ? "; Secure" : "");
 
   return {
     required: true,
-    address: (req) => String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown",
+    address: (req) => req.headers["cf-connecting-ip"] || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket?.remoteAddress || "unknown",
+    // Signed in by cookie only. Never counts as a guess, so it is safe to call from anywhere.
+    signedIn: (req) => tokenOk(cookieOf(req)),
     // Signed in by cookie, or (for scripts and tests) by sending the secret in a header.
     allowed(req) {
       if (tokenOk(cookieOf(req))) return true;
