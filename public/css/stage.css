@@ -79,4 +79,11 @@
 .stamp.boards { left: -3.6em; right: .9em; bottom: 6.6em; font-size: 3.6em; padding: .28em .2em .34em; color: var(--red); background: var(--paper); border: .1em solid var(--red); outline: .05em solid var(--red); outline-offset: .08em; transform: rotate(-7deg); animation: stamp-in .45s var(--spring) both; }
 @keyframes stamp-in { from { transform: rotate(-16deg) scale(2.6); opacity: 0; } to { transform: rotate(-7deg) scale(1); opacity: 1; } }
 
-@media (prefers-reduced-motion: reduce) { .pass, .answer, .stamp.boards { animation-duration: .01s; } }
+/* the question writes itself out word by word as the card lands; the choices follow */
+.typing { --start: .45s; }
+.typing .w { display: inline-block; animation: word-in .42s var(--ease) backwards; animation-delay: calc(var(--start) + var(--i) * var(--gap)); }
+@keyframes word-in { from { opacity: 0; transform: translateY(.28em); filter: blur(.08em); } to { opacity: 1; transform: none; filter: none; } }
+.typing .choices li { animation: choice-in .5s var(--spring) backwards; animation-delay: calc(var(--start) + var(--typed) + .15s + var(--c) * .12s); }
+.typing .write-hint { animation: choice-in .5s var(--ease) backwards; animation-delay: calc(var(--start) + var(--typed) + .15s); }
+@keyframes choice-in { from { opacity: 0; transform: translateY(.6em); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pass, .answer, .stamp.boards, .typing .w, .typing .choices li, .typing .write-hint { animation-duration: .01s; animation-delay: 0s; } }
