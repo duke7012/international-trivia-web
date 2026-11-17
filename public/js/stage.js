@@ -7,7 +7,7 @@ import { mediaPosition, timerRemaining } from "/shared/engine.mjs";
 const LETTERS = ["A", "B", "C", "D"];
 
 // Shrinks its text until it fits the box, so a long question never spills off the card.
-export function FitText({ text, max = 5.2, min = 1.7, cls = "" }) {
+export function FitText({ text, max = 5.2, min = 1.7, cls = "", words = false }) {
   const ref = useRef();
   useLayoutEffect(() => {
     const el = ref.current; if (!el) return;
@@ -21,7 +21,9 @@ export function FitText({ text, max = 5.2, min = 1.7, cls = "" }) {
     document.fonts?.ready.then(fit);
     return () => ro.disconnect();
   }, [text, max, min]);
-  return html`<div class="fit ${cls}"><p ref=${ref}>${text}</p></div>`;
+  // With `words`, each word is its own span so it can appear in turn. The hidden words still take
+  // up their space, so the text is sized once for the whole question and never shifts as it types.
+  return html`<div class="fit ${cls}"><p ref=${ref}>${words ? text.split(/(\s+)/).map((w, i) => (i % 2 ? w : html`<span class="w" style=${`--i:${i / 2}`}>${w}</span>`)) : text}</p></div>`;
 }
 
 // Countdown, always computed from the server's deadline, never from "when this page loaded".
@@ -133,12 +135,20 @@ export function MediaPlayer({ media, kind, mstate, silent, onEnded }) {
 
 const fitStyle = (m) => `object-fit:${m.fit};object-position:${m.focusX}% ${m.focusY}%;transform:scale(${m.zoom});transform-origin:${m.focusX}% ${m.focusY}%`;
 
-export function QuestionCard({ q, number, phase = "QUESTION_VISIBLE", answer = null, timer = null, mstate = null, silent = false, onEnded, onSecond, airline = "Golden Bell Air" }) {
+// Seconds between words when the question writes itself out, and the most the whole sentence takes.
+const WORD_GAP = 0.14, MAX_TYPE = 4;
+
+export function QuestionCard({ q, number, phase = "QUESTION_VISIBLE", answer = null, timer = null, mstate = null, silent = false, onEnded, onSecond, airline = "Golden Bell Air", typing = false }) {
   const hasMedia = q.presentation !== "text" && q.media;
+  // Write the question out word by word only when it first appears. A card that mounts later
+  // (a refreshed projector after the timer started, or once the answer is out) shows it whole.
+  const [typed] = useState(() => typing && phase === "QUESTION_VISIBLE");
+  const count = q.text.trim().split(/\s+/).length;
+  const gap = Math.min(WORD_GAP, MAX_TYPE / Math.max(count, 1));
   const boards = phase === "BOARDS_UP";
   const revealed = !!answer;
   const long = q.text.length > 150;
-  return html`<article class="pass ${hasMedia ? "with-media" : ""} kind-${q.presentation} ${long ? "long" : ""}" data-testid="question-card" data-phase=${phase}>
+  return html`<article class="pass ${hasMedia ? "with-media" : ""} kind-${q.presentation} ${long ? "long" : ""} ${typed ? "typing" : ""}" style=${typed ? `--gap:${gap.toFixed(3)}s;--typed:${(gap * count).toFixed(2)}s` : ""} data-testid="question-card" data-phase=${phase}>
     <div class="pass-main">
       <header class="pass-head">
         <span class="pass-air">${airline}</span>
@@ -152,9 +162,9 @@ export function QuestionCard({ q, number, phase = "QUESTION_VISIBLE", answer = n
             : html`<${MediaPlayer} media=${q.media} kind=${q.presentation} mstate=${mstate} silent=${silent} onEnded=${onEnded} />`}
         </div>`}
         <div class="pass-text">
-          <${FitText} text=${q.text} max=${hasMedia ? 4.4 : q.choices ? 6.2 : 7} cls="q" />
+          <${FitText} text=${q.text} max=${hasMedia ? 4.4 : q.choices ? 6.2 : 7} cls="q" words=${typed} />
           ${q.choices
-            ? html`<ol class="choices">${q.choices.map((c, i) => html`<li class=${revealed ? (i === answer.correctChoice ? "right" : "dim") : ""} data-testid=${`choice-${i}`}><b>${LETTERS[i]}</b><span>${c}</span></li>`)}</ol>`
+            ? html`<ol class="choices">${q.choices.map((c, i) => html`<li class=${revealed ? (i === answer.correctChoice ? "right" : "dim") : ""} style=${`--c:${i}`} data-testid=${`choice-${i}`}><b>${LETTERS[i]}</b><span>${c}</span></li>`)}</ol>`
             : !revealed && html`<p class="write-hint">Write your answer on your board</p>`}
           ${revealed && html`<div class="answer" data-testid="answer">
             ${!q.choices && html`<p class="answer-line"><span>Answer</span><b>${answer.text}</b></p>`}

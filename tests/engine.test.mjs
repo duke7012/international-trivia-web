@@ -268,6 +268,7 @@ test("the user's file names are matched to the right moments", () => {
     "goldenbell_game_contestant_answer_reveal_loop.mp3": "boardsLoop",
     "goldenbell_game_contestant_elimination.mp3": "elimination",
     "rescue_game_music.mp3": "rescueGame",
+    "finale_music.mp3": "finale",
   };
   for (const [name, id] of Object.entries(files)) assert.equal(cueForFile(name), id, name);
   assert.equal(new Set(Object.values(files)).size, SOUND_CUES.length, "every moment has a file");
@@ -343,6 +344,7 @@ test("which sound plays when", () => {
   const rescue = planAudio(v({ phase: "RESCUE", rescue: { attempt: 1 } }), 0);
   assert.deepEqual(rescue.steps, [{ cue: "rescueGame", loop: true }], "music loops through the rescue game");
   assert.notEqual(planAudio(v({ phase: "RESCUE", rescue: { attempt: 2 } }), 0).key, rescue.key, "a second game starts the music again");
+  assert.deepEqual(planAudio(v({ phase: "FINISHED" }), 0).steps, [{ cue: "finale", loop: true }], "music loops through the finale");
 
   // with only some files supplied, only those play
   assert.equal(planAudio({ phase: "BOARDS_UP", stop: 1, cues: {} }, 0), null);

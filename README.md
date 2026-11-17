@@ -208,6 +208,7 @@ live show and the demo rehearsal, and play on the projector.
 | After the correct answer | Plays straight after the one above | `congratulations` |
 | Checking eliminations | Loops while you mark who is out | `contestant_elimination` |
 | Rescue game | Loops while the rescue game's rules are on the projector | `rescue` or `mayday` |
+| Finale | Loops while the finale is on the projector | `finale` |
 
 The two lead-ins change the timing on purpose: the host still presses Start timer and Reveal
 answer, and the count or the answer then waits for the lead-in to finish (never more than 20

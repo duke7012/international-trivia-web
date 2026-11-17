@@ -34,7 +34,7 @@ function sounds(prev, v) {
   if (to("BOARDS_UP") && !own("thinkOver", "boardsLoop")) play.boardsUp(v.sound.timer);
   if (to("ANSWER_REVEALED") && !own("revealLead", "correct")) play.reveal();
   if (to("ALL_ELIMINATED") && prev.phase !== "RESCUE") play.mayday();
-  if (to("FINISHED")) play.goldenBell();
+  if (to("FINISHED") && !own("finale")) play.goldenBell();
   if (v.lastRescue && !prev.lastRescue) play.fanfare();
   if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight" && !own("flight")) play.takeoff();
   // A new rescue game: the built-in alarm, unless the host has their own music for it.
@@ -169,12 +169,12 @@ function Screen({ v, status, armed, onArm }) {
   const quiet = !!v.question || !!pq || ["ALL_ELIMINATED", "RESCUE", "FINISHED"].includes(v.phase);
 
   let body = null;
-  if (pq) body = html`<div class="veil"></div><${QuestionCard} key="preview" q=${pq.question} number=${pq.number} answer=${pq.answer} phase=${pq.answer ? "ANSWER_REVEALED" : "QUESTION_VISIBLE"} timer=${{ idle: true, durationMs: pq.question.countdown * 1000 }} mstate=${pq.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} />`;
+  if (pq) body = html`<div class="veil"></div><${QuestionCard} key="preview" typing q=${pq.question} number=${pq.number} answer=${pq.answer} phase=${pq.answer ? "ANSWER_REVEALED" : "QUESTION_VISIBLE"} timer=${{ idle: true, durationMs: pq.question.countdown * 1000 }} mstate=${pq.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} />`;
   else if (pf) body = flying ? html`<${Flying} to=${Math.min(pf.to, Math.floor(at) + 1)} preview=${true} />` : html`<${Waiting} v=${{ ...v, stop: pf.to, chosenTopic: null }} />`;
   else if (v.phase === "LOBBY") body = v.topicBoard ? html`<${TopicBoard} v=${v} />` : html`<${Lobby} v=${v} />`;
   else if (v.phase === "FLIGHT_ANIMATING") body = html`<${Flying} to=${v.flight.to} />`;
   else if (v.phase === "DESTINATION_ARRIVED") body = html`<${Waiting} v=${v} />`;
-  else if (v.question) body = html`<div class="veil"></div><${QuestionCard} key=${"q" + v.stop} q=${v.question} number=${v.stop} phase=${v.answer && !shown ? "BOARDS_UP" : v.phase} answer=${shown ? v.answer : null} timer=${v.timer} mstate=${v.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} onSecond=${onSecond} />
+  else if (v.question) body = html`<div class="veil"></div><${QuestionCard} key=${"q" + v.stop} typing q=${v.question} number=${v.stop} phase=${v.answer && !shown ? "BOARDS_UP" : v.phase} answer=${shown ? v.answer : null} timer=${v.timer} mstate=${v.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} onSecond=${onSecond} />
     ${v.phase === "ELIMINATION_REVIEW" && html`<p class="checking" data-testid="checking"><i class="pulse"></i>Checking boards</p>`}`;
   else if (v.phase === "READY_TO_FLY") body = v.topicBoard ? html`<${TopicBoard} v=${v} />` : html`<${Between} v=${v} />`;
   else if (v.phase === "ALL_ELIMINATED") body = html`<${AllOut} v=${v} />`;

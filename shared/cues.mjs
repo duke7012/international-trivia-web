@@ -45,6 +45,8 @@ export function planAudio(v, now) {
       return plan(`elimination:${v.stop}`, [{ cue: "elimination", loop: true }]);
     case "RESCUE":
       return plan(`rescue:${v.rescue?.attempt}`, [{ cue: "rescueGame", loop: true }]);
+    case "FINISHED":
+      return plan(`finale:${v.stop}`, [{ cue: "finale", loop: true }]);
     default:
       return null;
   }
