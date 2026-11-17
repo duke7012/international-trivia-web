@@ -1,5 +1,5 @@
 // Everything that lives on disk (Node server): two fully separate workspaces ("live" and
-// "demo"), each with its own question bank, rescue clues, settings, session and media folder.
+// "demo"), each with its own question bank, rescue game, settings, session and media folder.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

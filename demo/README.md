@@ -1,6 +1,6 @@
 # Demo set
 
-A small rehearsal set: 12 questions (text, image, video and audio) and 6 rescue clues.
+A small rehearsal set: 12 questions (text, image, video and audio) and a sample rescue game.
 It is copied into its own "demo" workspace the first time the app runs and is never mixed
 with the live question bank. Reset it from Settings while "Demo rehearsal" is selected.
 

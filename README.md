@@ -207,6 +207,7 @@ live show and the demo rehearsal, and play on the projector.
 | Correct answer appears | Plays as the answer appears | `correct_answer` |
 | After the correct answer | Plays straight after the one above | `congratulations` |
 | Checking eliminations | Loops while you mark who is out | `contestant_elimination` |
+| Rescue game | Loops while the rescue game's rules are on the projector | `rescue` or `mayday` |
 
 The two lead-ins change the timing on purpose: the host still presses Start timer and Reveal
 answer, and the count or the answer then waits for the lead-in to finish (never more than 20
@@ -217,39 +218,36 @@ does not replay one-off sounds.
 
 There is no scheduled rescue. A rescue only becomes possible when the last contestant is
 eliminated. Then the show stops in `ALL_ELIMINATED`: the projector shows the emergency screen and
-the dashboard shows **START RESCUE MISSION**. Nothing else happens until you choose.
+the dashboard shows **START RESCUE GAME**. Nothing else happens until you choose.
 
-1. Pick one to three eliminated contestants as the rescue crew, and start the mission.
-2. Show the route map: three checkpoints are missing.
-3. For each checkpoint: reveal the clue, record **Correct**, **Wrong** or **Skip**. Start, pause
-   and resume the 90-second rescue clock yourself.
-4. Reveal the result. You can change any clue's result before you apply it.
-5. Return contestants: everyone, a random draw, or your own picks, depending on the result.
+The rescue is a physical game played in the room by everyone who is out. The app does not run or
+score it:
 
-Default results (change them in the **Rescue** tab): three correct returns everyone, two returns
-half (rounded up), one returns up to three, zero returns nobody.
+1. Press **START RESCUE GAME**. The projector shows the game's name and its rules, numbered.
+2. Play the game in the room. Nothing on screen moves on by itself.
+3. Tick who won their way back, and press **Return to the flight**.
 
-When nobody returns you can **retry the rescue** or use the **emergency rule** you set in advance.
-An **emergency return** (you pick who comes back) is always available, so the show can never be
-stuck with nobody in the game. Only eliminated contestants can ever be picked.
+Write the game's name and rules in the **Rescue** tab (one rule per line), separate from the 30
+main questions. **Leave rescue** goes back to the emergency screen; a second game shows as round 2.
+
+An **emergency return** (you pick who comes back) and the **emergency rule** you set in advance are
+always available, so the show can never be stuck with nobody in the game. Only eliminated
+contestants can ever be picked.
 
 After a rescue the journey continues with the next unplayed question. The question that caused the
 wipe-out is not replayed.
 
-Rescue clues live in the **Rescue** tab, separate from the 30 main questions. Add more than three
-so a retry gets fresh ones.
-
 ## Rehearsing
 
 - **Demo rehearsal** (switch at the top right) is a separate workspace with 12 sample questions
-  covering all four presentation types, and 6 rescue clues. It has its own roster and show state
+  covering all four presentation types, and a sample rescue game. It has its own roster and show state
   and never mixes with your live questions. The projector shows a "Rehearsal" ribbon.
 - **Settings, Preview the flight** plays the animation (one flight, or a tour of all 30
   destinations) under a "Preview" banner. It works with an empty question bank.
 
 ## Your data
 
-Everything is saved as you go in the `data/` folder next to the app: questions, rescue clues,
+Everything is saved as you go in the `data/` folder next to the app: questions, the rescue game,
 settings, uploaded media, and the state of the show itself. Closing the browser, refreshing, or
 restarting the app loses nothing; a show interrupted mid-question resumes mid-question. To back up
 or move a show, copy the `data/` folder. `data/live` is your show, `data/demo` is the rehearsal set.

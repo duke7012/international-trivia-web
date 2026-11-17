@@ -1,66 +1,43 @@
-// Rescue tab (clues and rules, stored apart from the question bank) and Settings tab.
+// Rescue tab (the rescue game's name and rules, stored apart from the question bank) and Settings tab.
 // Both are re-created when the host switches between the live show and the demo set, so each
 // starts from that set's saved values.
 import { html, useRef, useState } from "/vendor/preact/htm-preact.module.js";
-import { upload } from "../net.js";
-import { EMERGENCY_RULES, clueReady, SOUND_CUES, cueForFile } from "/shared/schema.mjs";
-import { run, say, Field, MediaPicker } from "./ui.js";
+import { upload, plural } from "../net.js";
+import { EMERGENCY_RULES, SOUND_CUES, cueForFile, ruleLines } from "/shared/schema.mjs";
+import { run, say, Field } from "./ui.js";
 
-const RULE_LABEL = { all: "Everyone returns", half: "Half return, rounded up", upTo: "Up to a number return", none: "Nobody returns (host uses the emergency rule)" };
 
 export function RescueTab({ view }) {
   const [r, setR] = useState(() => structuredClone(view.rescue));
   const [dirty, setDirty] = useState(false);
   const set = (patch) => { setR((x) => ({ ...x, ...patch })); setDirty(true); };
-  const setClue = (i, patch) => set({ clues: r.clues.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
-  const save = async () => {
-    const payload = { ...r, clues: r.clues.map((c) => ({ ...c, variants: typeof c.variants === "string" ? c.variants.split(/[\n;,]/) : c.variants })) };
-    if (await run("rescue.save", { rescue: payload })) { setDirty(false); say("Rescue mission saved.", "ok"); }
-  };
-  const ready = r.clues.filter((c) => clueReady({ ...c, answer: (c.answer || "").trim(), prompt: (c.prompt || "").trim() })).length;
+  const save = async () => { if (await run("rescue.save", { rescue: r })) { setDirty(false); say("Rescue game saved.", "ok"); } };
+  const lines = ruleLines(r.rules);
   return html`<div class="setup">
     <section class="panel">
-      <header class="panel-head"><h2>MAYDAY! Save the flight! Destination clues</h2><span class="muted" data-testid="clues-ready">${ready} ready. Each rescue uses three.</span></header>
-      <p class="muted">These clues are separate from the 30 main questions. The rescue only becomes available when every contestant has been eliminated, and only starts when you press the button. Add more than three so a retry gets fresh clues.</p>
-      <ol class="clue-edit">
-        ${r.clues.map((c, i) => html`<li data-testid=${`clue-edit-${i}`}>
-          <div class="grid2">
-            <${Field} label=${`Clue ${i + 1}: prompt shown to the crew`} hint="A landmark, flag, cultural object or short text"><textarea rows="2" value=${c.prompt} onInput=${(e) => setClue(i, { prompt: e.target.value })} data-testid=${`clue-prompt-${i}`}></textarea><//>
-            <div>
-              <${Field} label="Destination (the answer)"><input type="text" value=${c.answer} onInput=${(e) => setClue(i, { answer: e.target.value })} data-testid=${`clue-answer-${i}`} /><//>
-              <${Field} label="Also accept"><input type="text" value=${Array.isArray(c.variants) ? c.variants.join(", ") : c.variants} onInput=${(e) => setClue(i, { variants: e.target.value })} placeholder="Separated by commas" /><//>
-            </div>
-          </div>
-          <div class="grid2">
-            <div><span class="field-label">Image (optional)</span><${MediaPicker} kind="image" media=${c.image} onChange=${(m) => setClue(i, { image: m })} allowUrl=${true} /></div>
-            <${Field} label="Host notes"><input type="text" value=${c.hostNotes || ""} onInput=${(e) => setClue(i, { hostNotes: e.target.value })} /><//>
-          </div>
-          <div class="row"><button type="button" class="btn ghost small danger" onClick=${() => set({ clues: r.clues.filter((_, j) => j !== i) })}>Delete clue ${i + 1}</button>
-            ${i > 0 && html`<button type="button" class="btn ghost small" onClick=${() => { const cl = [...r.clues]; [cl[i - 1], cl[i]] = [cl[i], cl[i - 1]]; set({ clues: cl }); }}>Move up</button>`}</div>
-        </li>`)}
-      </ol>
-      <button type="button" class="btn" onClick=${() => set({ clues: [...r.clues, { id: "", prompt: "", answer: "", variants: [], image: null, hostNotes: "" }] })} data-testid="btn-add-clue">Add a clue</button>
+      <header class="panel-head"><h2>MAYDAY! Save the flight! Rescue game</h2><span class="muted" data-testid="rules-count">${plural(lines.length, "rule")} on the projector</span></header>
+      <p class="muted">When every contestant has been eliminated, you can start the rescue game: everyone who is out plays a game in the room, and the projector shows these rules. When it is over, you tick who won their way back on board.</p>
+      <div class="grid2">
+        <div>
+          <${Field} label="Game name" hint="The big title on the projector"><input type="text" maxlength="80" value=${r.title} onInput=${(e) => set({ title: e.target.value })} data-testid="rescue-title" /><//>
+          <${Field} label="Rules" hint="One rule per line. Each line is numbered on the projector (up to 12)."><textarea rows="8" value=${r.rules} onInput=${(e) => set({ rules: e.target.value })} data-testid="rescue-rules" /><//>
+        </div>
+        <div class="rules-preview" data-testid="rules-preview">
+          <span class="field-label">On the projector</span>
+          <b>${r.title.trim() || "Rescue game"}</b>
+          <ol>${lines.map((l) => html`<li>${l}</li>`)}</ol>
+        </div>
+      </div>
     </section>
 
     <section class="panel">
-      <header class="panel-head"><h2>Rescue rules</h2></header>
-      <div class="grid3">
-        <${Field} label="Rescue clock (seconds)" hint="One clock for all three clues"><input type="number" min="15" max="900" value=${r.timerSec} onInput=${(e) => set({ timerSec: e.target.value })} data-testid="rescue-timer" /><//>
-      </div>
-      <table class="rules"><tbody>
-        ${[3, 2, 1, 0].map((k) => html`<tr>
-          <th>${k} correct</th>
-          <td><select value=${r.rules[k].type} onChange=${(e) => set({ rules: { ...r.rules, [k]: e.target.value === "upTo" ? { type: "upTo", n: r.rules[k].n || 3 } : { type: e.target.value } } })} data-testid=${`rule-${k}`}>${Object.entries(RULE_LABEL).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></td>
-          <td>${r.rules[k].type === "upTo" && html`<label class="inline">up to <input type="number" min="1" max="999" class="narrow" value=${r.rules[k].n} onInput=${(e) => set({ rules: { ...r.rules, [k]: { type: "upTo", n: e.target.value } } })} data-testid=${`rule-n-${k}`} /> contestants</label>`}</td>
-        </tr>`)}
-      </tbody></table>
-      <${Field} label="Emergency continuation rule" hint="Used when a rescue returns nobody, or whenever you choose to skip the rescue">
+      <header class="panel-head"><h2>If nobody wins</h2></header>
+      <${Field} label="Emergency continuation rule" hint="For when you skip the game, or the game brings nobody back">
         <select value=${r.emergencyRule} onChange=${(e) => set({ emergencyRule: e.target.value })} data-testid="emergency-rule">${Object.entries(EMERGENCY_RULES).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select>
       <//>
-      <p class="muted">For a partial rescue you choose on the night between drawing names at random and picking them yourself. Only eliminated contestants can ever be picked.</p>
     </section>
 
-    <div class="savebar ${dirty ? "dirty" : ""}"><span>${dirty ? "You have unsaved rescue changes." : "Rescue mission is saved."}</span><button type="button" class="btn primary" onClick=${save} disabled=${!dirty} data-testid="btn-save-rescue">Save rescue mission</button></div>
+    <div class="savebar ${dirty ? "dirty" : ""}"><span>${dirty ? "You have unsaved rescue changes." : "Rescue game is saved."}</span><button type="button" class="btn primary" onClick=${save} disabled=${!dirty} data-testid="btn-save-rescue">Save rescue game</button></div>
   </div>`;
 }
 
@@ -184,9 +161,9 @@ export function SettingsTab({ view }) {
       <div class="row">
         <button type="button" class="btn warn" onClick=${() => confirm("Start a new show? The plane returns to the home airport and every contestant is back in. Questions are kept.") && run("resetShow", {})} data-testid="btn-reset-show">Start a new show, keep the roster</button>
         <button type="button" class="btn warn" onClick=${() => confirm("Start a new show and clear the roster? Questions are kept.") && run("resetShow", { clearRoster: true })}>Start a new show, clear the roster</button>
-        ${demo && html`<button type="button" class="btn warn" onClick=${() => confirm("Reset the demo questions, demo rescue clues and demo show to how they shipped?") && run("demo.reset")} data-testid="btn-reset-demo">Reset the demo set</button>`}
+        ${demo && html`<button type="button" class="btn warn" onClick=${() => confirm("Reset the demo questions, demo rescue game and demo show to how they shipped?") && run("demo.reset")} data-testid="btn-reset-demo">Reset the demo set</button>`}
       </div>
-      <p class="muted">Questions, rescue clues, media and the state of the show are saved on this computer as you go, so closing the browser or restarting the app keeps everything.</p>
+      <p class="muted">Questions, the rescue game, media and the state of the show are saved on this computer as you go, so closing the browser or restarting the app keeps everything.</p>
     </section>
   </div>`;
 }

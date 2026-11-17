@@ -5,7 +5,7 @@
 // The rule this file exists to protect: flying, showing the question, starting the timer and
 // revealing the answer are four separate host actions. No action here performs two of them.
 
-import { TOTAL_STOPS, publishErrors, difficultyForStop, clueReady, rescueReturnCount, MAX_LEAD_MS } from "./schema.mjs";
+import { TOTAL_STOPS, publishErrors, difficultyForStop, MAX_LEAD_MS } from "./schema.mjs";
 
 export class ShowError extends Error {}
 const fail = (msg) => { throw new ShowError(msg); };
@@ -30,7 +30,7 @@ export function newSession() {
     shown: null, timer: null, media: idleMedia(),
     played: [], contestants: [],
     review: null, lastReview: null, topicBoard: null,
-    rescue: null, rescueAttempts: 0, usedClueIds: [], lastRescue: null,
+    rescue: null, rescueAttempts: 0, lastRescue: null,
     allOutAtStop: null, answerAt: 0,
   };
 }
@@ -82,15 +82,6 @@ export function topicOptions(s, questions, settings) {
   }).sort((a, b) => a.topic.localeCompare(b.topic));
 }
 
-export function rescueOutcome(s, rescueContent) {
-  const r = s.rescue;
-  if (!r) return null;
-  const correct = r.clues.filter((c) => c.result === "correct").length;
-  const rule = rescueContent.rules[correct];
-  const out = eliminated(s).length;
-  return { correct, rule, returnCount: rescueReturnCount(rule, out), eliminated: out };
-}
-
 // Position of a clip, in seconds from its start, given the shared media state.
 export const mediaPosition = (m, now) => (m.status === "playing" ? m.pos + Math.max(0, now - m.at) / 1000 : m.pos);
 
@@ -123,35 +114,12 @@ const setStatus = (s, ids, status, stop) => {
 };
 const afterElimination = (s) => (active(s).length === 0 && s.contestants.length > 0 ? { ...s, phase: "ALL_ELIMINATED", allOutAtStop: s.stop, rescue: null, topicBoard: null } : s);
 const snapshot = (q, slot) => ({ question: structuredClone(q), slot, sourceUpdatedAt: q.updatedAt });
-const pick = (list, count, random) => {
-  const pool = [...list];
-  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  return pool.slice(0, count);
-};
 const backInTheAir = (s, returnedIds, now, extra = {}) => ({
   ...s,
   contestants: setStatus(s, returnedIds, "active", null),
   phase: "READY_TO_FLY", rescue: null, allOutAtStop: null,
   lastRescue: { returnedIds, at: now, ...extra },
 });
-
-function buildRescue(s, ctx, crew) {
-  const ready = ctx.rescue.clues.filter(clueReady);
-  if (ready.length < 3) fail("The rescue needs three ready clues (each with a prompt or image, and an answer). Add them in the Rescue tab, or use an emergency return.");
-  let fresh = ready.filter((c) => !s.usedClueIds.includes(c.id));
-  let usedClueIds = s.usedClueIds;
-  if (fresh.length < 3) { fresh = ready; usedClueIds = []; }
-  const clues = fresh.slice(0, 3).map((c) => ({ id: c.id, prompt: c.prompt, image: c.image, answer: c.answer, variants: c.variants, hostNotes: c.hostNotes, revealed: false, result: null }));
-  const durationMs = ctx.rescue.timerSec * 1000;
-  return {
-    ...s, phase: "RESCUE", topicBoard: null,
-    rescueAttempts: s.rescueAttempts + 1,
-    usedClueIds: [...usedClueIds, ...clues.map((c) => c.id)],
-    rescue: { attempt: s.rescueAttempts + 1, step: "INTRO", crew, clues, idx: 0, clock: { durationMs, remainingMs: durationMs, deadline: null, running: false, started: false } },
-  };
-}
-
-const stopClock = (clock, now) => (clock.running ? { ...clock, running: false, remainingMs: Math.max(0, clock.deadline - now), deadline: null } : clock);
 
 const handlers = {
   // ----- roster -----
@@ -285,89 +253,20 @@ const handlers = {
     return afterElimination(next);
   },
 
-  // ----- MAYDAY rescue (only ever reachable from ALL_ELIMINATED, only ever started by the host) -----
-  startRescue(s, { crewIds }, ctx) {
-    need(s, ["ALL_ELIMINATED"], "The rescue mission");
-    const crew = [...new Set(crewIds || [])];
-    if (crew.length < 1 || crew.length > 3) fail("Pick one, two or three contestants as the rescue crew.");
-    crew.forEach((id) => { if (byId(s, id).status !== "eliminated") fail("Only eliminated contestants can join the rescue crew."); });
-    return buildRescue(s, ctx, crew);
+  // ----- MAYDAY rescue game (only ever reachable from ALL_ELIMINATED, only ever started by the host) -----
+  // Every eliminated contestant plays a physical game in the room while the projector shows its
+  // rules. The app does not score it: the host picks who won their way back.
+  startRescue(s) {
+    need(s, ["ALL_ELIMINATED"], "The rescue game");
+    return { ...s, phase: "RESCUE", topicBoard: null, rescueAttempts: s.rescueAttempts + 1, rescue: { attempt: s.rescueAttempts + 1 } };
   },
-  rescueShowMap(s) { need(s, ["RESCUE"], "The route map"); if (s.rescue.step !== "INTRO") fail("The map is already up."); return { ...s, rescue: { ...s.rescue, step: "MAP" } }; },
-  rescueRevealClue(s) {
-    need(s, ["RESCUE"], "Revealing a clue");
-    const r = s.rescue;
-    if (!["MAP", "CLUES"].includes(r.step)) fail("Clues cannot be revealed at this point of the rescue.");
-    if (r.clues[r.idx].revealed) fail("This clue is already on screen.");
-    return { ...s, rescue: { ...r, step: "CLUES", clues: r.clues.map((c, i) => (i === r.idx ? { ...c, revealed: true } : c)) } };
-  },
-  rescueClock(s, { op }, ctx) {
-    need(s, ["RESCUE"], "The rescue clock");
-    const r = s.rescue;
-    if (!["MAP", "CLUES"].includes(r.step)) fail("The rescue clock is not in use at this point.");
-    if (op === "pause") return { ...s, rescue: { ...r, clock: stopClock(r.clock, ctx.now) } };
-    if (r.clock.running) return s;
-    if (r.clock.remainingMs <= 0) fail("The rescue clock has run out.");
-    return { ...s, rescue: { ...r, clock: { ...r.clock, running: true, started: true, deadline: ctx.now + r.clock.remainingMs } } };
-  },
-  rescueMark(s, { result }, ctx) {
-    need(s, ["RESCUE"], "Recording the answer");
-    const r = s.rescue;
-    if (!["MAP", "CLUES"].includes(r.step)) fail("Answers cannot be recorded at this point of the rescue.");
-    if (!["correct", "wrong", "skipped"].includes(result)) fail("Unknown result.");
-    if (result !== "skipped" && !r.clues[r.idx].revealed) fail("Reveal the clue before recording an answer.");
-    const clues = r.clues.map((c, i) => (i === r.idx ? { ...c, result } : c));
-    const done = clues.every((c) => c.result);
-    return { ...s, rescue: { ...r, step: "CLUES", clues, clock: done ? stopClock(r.clock, ctx.now) : r.clock } };
-  },
-  rescueNextClue(s) {
-    need(s, ["RESCUE"], "The next clue");
-    const r = s.rescue;
-    if (r.step !== "CLUES" || !r.clues[r.idx].result) fail("Record this clue's result first.");
-    if (r.idx >= 2) fail("That was the last clue.");
-    return { ...s, rescue: { ...r, idx: r.idx + 1 } };
-  },
-  rescueTimeUp(s) {
-    need(s, ["RESCUE"], "Rescue time-out");
-    const r = s.rescue;
-    return { ...s, rescue: { ...r, step: "TIME_UP", clues: r.clues.map((c) => (c.result ? c : { ...c, result: "timeout" })), clock: { ...r.clock, running: false, remainingMs: 0, deadline: null } } };
-  },
-  rescueOverride(s, { idx, result }) {
-    need(s, ["RESCUE"], "Overriding a result");
-    const r = s.rescue;
-    if (!["CLUES", "TIME_UP", "RESULT"].includes(r.step)) fail("Nothing to override yet.");
-    if (!["correct", "wrong"].includes(result) || !r.clues[idx]) fail("Unknown override.");
-    return { ...s, rescue: { ...r, clues: r.clues.map((c, i) => (i === idx ? { ...c, result, revealed: true } : c)) } };
-  },
-  rescueRevealResult(s, _, ctx) {
-    need(s, ["RESCUE"], "Revealing the rescue result");
-    const r = s.rescue;
-    if (r.step === "RESULT") return s;
-    if (!r.clues.every((c) => c.result)) fail("Record or skip all three clues before revealing the result.");
-    return { ...s, rescue: { ...r, step: "RESULT", clock: stopClock(r.clock, ctx.now) } };
-  },
-  rescueApply(s, { mode, ids }, ctx) {
+  rescueApply(s, { ids }, ctx) {
     need(s, ["RESCUE"], "Returning contestants");
-    if (s.rescue.step !== "RESULT") fail("Reveal the rescue result first.");
-    const o = rescueOutcome(s, ctx.rescue);
-    if (o.returnCount < 1) fail("This result returns nobody. Retry the rescue or use the emergency rule.");
-    const out = eliminated(s); // never includes an active contestant
-    let back;
-    if (o.returnCount >= out.length) back = out.map((c) => c.id);
-    else if (mode === "random") back = pick(out, o.returnCount, ctx.random).map((c) => c.id);
-    else {
-      back = [...new Set(ids || [])];
-      const okIds = new Set(out.map((c) => c.id));
-      if (!back.length) fail("Pick who returns.");
-      if (back.some((id) => !okIds.has(id))) fail("Only eliminated contestants can return.");
-      if (back.length > o.returnCount) fail(`This result returns at most ${o.returnCount}.`);
-    }
-    return backInTheAir(s, back, ctx.now, { correct: o.correct, via: "rescue" });
-  },
-  rescueRetry(s, _, ctx) {
-    need(s, ["RESCUE"], "Retrying the rescue");
-    if (!["RESULT", "TIME_UP"].includes(s.rescue.step)) fail("Finish this attempt before retrying.");
-    return buildRescue({ ...s, phase: "ALL_ELIMINATED" }, ctx, s.rescue.crew);
+    const okIds = new Set(eliminated(s).map((c) => c.id)); // never includes an active contestant
+    const back = [...new Set(ids || [])];
+    if (!back.length) fail("Pick who won their way back.");
+    if (back.some((id) => !okIds.has(id))) fail("Only eliminated contestants can return.");
+    return backInTheAir(s, back, ctx.now, { via: "rescue" });
   },
   rescueAbort(s) { need(s, ["RESCUE"], "Leaving the rescue"); return { ...s, phase: "ALL_ELIMINATED", rescue: null }; },
 
@@ -420,10 +319,9 @@ export function reduce(session, action, ctx) {
   return next === session ? session : { ...next, rev: session.rev + 1 };
 }
 
-// What the clock alone is allowed to do: land the plane, raise the boards, end the rescue clock.
+// What the clock alone is allowed to do: land the plane and raise the boards.
 export function due(session, now) {
   if (session.phase === "FLIGHT_ANIMATING" && session.flight && now >= session.flight.startedAt + session.flight.durationMs) return { type: "arrive" };
   if (session.phase === "TIMER_RUNNING" && session.timer.running && now >= session.timer.deadline) return { type: "timeUp" };
-  if (session.phase === "RESCUE" && session.rescue.clock.running && now >= session.rescue.clock.deadline) return { type: "rescueTimeUp" };
   return null;
 }

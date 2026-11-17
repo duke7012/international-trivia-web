@@ -4,11 +4,10 @@
 import { html, useEffect, useState } from "/vendor/preact/htm-preact.module.js";
 import { plural } from "../net.js";
 import { useRemaining } from "../stage.js";
-import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES, clueReady } from "/shared/schema.mjs";
+import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES } from "/shared/schema.mjs";
 import { run, excerpt, PHASE_TEXT, MediaControls } from "./ui.js";
 
 const secs = (ms) => Math.ceil(ms / 1000 - 0.001);
-const mmss = (ms) => { const s = Math.max(0, secs(ms)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 function Steps({ view, topic }) {
   const s = view.session, ph = s.phase;
@@ -152,87 +151,25 @@ function EmergencyExits({ view }) {
 }
 
 function AllOut({ view }) {
-  const s = view.session, out = s.contestants.filter((c) => c.status === "eliminated");
-  const [crew, setCrew] = useState([]);
-  const ready = view.rescue.clues.filter(clueReady).length;
-  const why = ready < 3 ? `The rescue needs three ready clues and has ${ready}. Add them in the Rescue tab, or use an emergency option below.` : !crew.length ? "Pick one to three contestants as the rescue crew." : "";
+  const s = view.session;
   return html`<div class="allout" data-testid="allout-panel">
     <p class="alert">Everyone has been eliminated. The plane has made an emergency stop at destination ${s.stop}. Nothing happens until you choose.</p>
-    <b>Rescue crew: pick one, two or three</b>
-    <div class="row"><button type="button" class="btn ghost small" onClick=${() => setCrew([...out].sort(() => Math.random() - 0.5).slice(0, 3).map((c) => c.id))} data-testid="crew-random">Pick three at random</button><span class="muted">${crew.length} selected</span></div>
-    <${PickPeople} people=${out} value=${crew} onChange=${setCrew} max=${3} testid="crew" />
-    <button type="button" class="btn mayday big" disabled=${!!why || !!view.preview} onClick=${() => run("startRescue", { crewIds: crew })} data-testid="btn-rescue-start">START RESCUE MISSION</button>
-    ${why && html`<p class="warn" data-testid="rescue-why">${why}</p>`}
+    <p class="note">The rescue game puts the rules of "${view.rescue.title}" on the projector for everyone who is out. Edit them in the Rescue tab.</p>
+    <button type="button" class="btn mayday big" disabled=${!!view.preview} onClick=${() => run("startRescue")} data-testid="btn-rescue-start">START RESCUE GAME</button>
     <${EmergencyExits} view=${view} />
   </div>`;
 }
 
-function RescueClock({ clock }) {
-  const ms = useRemaining({ ...clock, idle: false });
-  return html`<b class="readout ${clock.running ? "" : "paused"}" data-testid="host-rescue-clock">${mmss(ms)}</b>`;
-}
-
 function RescuePanel({ view }) {
-  const s = view.session, r = s.rescue, o = view.rescueOutcome;
+  const s = view.session, r = s.rescue;
   const out = s.contestants.filter((c) => c.status === "eliminated");
-  const [mode, setMode] = useState("random");
   const [ids, setIds] = useState([]);
-  const cur = r.clues[r.idx];
-  const allMarked = r.clues.every((c) => c.result);
-  const name = (id) => s.contestants.find((c) => c.id === id)?.name;
-  const playing = ["MAP", "CLUES"].includes(r.step);
-  return html`<div class="rescue-panel" data-testid="rescue-panel" data-step=${r.step}>
-    <div class="row between"><b>Rescue attempt ${r.attempt}. Crew: ${r.crew.map(name).join(", ")}</b><button type="button" class="btn ghost small" onClick=${() => confirm("Leave this rescue and go back to the emergency screen?") && run("rescueAbort")}>Leave rescue</button></div>
-
-    ${r.step === "INTRO" && html`<p class="note">The projector shows the MAYDAY title. When you are ready, bring up the broken route.</p>
-      <button type="button" class="btn primary big" onClick=${() => run("rescueShowMap")} data-testid="btn-rescue-map">Show the route map</button>`}
-
-    ${playing && html`<div class="clock-row">
-      <${RescueClock} clock=${r.clock} />
-      ${r.clock.running
-        ? html`<button type="button" class="btn" onClick=${() => run("rescueClock", { op: "pause" })} data-testid="btn-clock-pause">Pause rescue</button>`
-        : html`<button type="button" class="btn ${allMarked ? "" : "primary"}" disabled=${allMarked || r.clock.remainingMs <= 0} onClick=${() => run("rescueClock", { op: "start" })} data-testid="btn-clock-start">${r.clock.started ? "Resume clock" : "Start the rescue clock"}</button>`}
-      ${!r.clock.running && !allMarked && html`<span class="muted">${r.clock.started ? "Clock paused." : "The clock does not start until you start it."}</span>`}
-    </div>`}
-
-    <ol class="clues">${r.clues.map((c, i) => html`<li class="clue-row ${i === r.idx && playing ? "current" : ""} ${c.result || ""}" data-testid=${`clue-row-${i}`}>
-      <div class="clue-info">
-        <b>Checkpoint ${i + 1}${c.image ? " (with image)" : ""}</b>
-        <span>${c.prompt || "(image clue)"}</span>
-        <span class="hq-answer">Answer: <b>${c.answer}</b>${c.variants.length > 0 && html` <span>also accept ${c.variants.join(", ")}</span>`}</span>
-        ${c.hostNotes && html`<span class="muted">${c.hostNotes}</span>`}
-      </div>
-      <div class="clue-act">
-        ${c.result && html`<i class="badge ${c.result === "correct" ? "published" : "live"}" data-testid=${`clue-result-${i}`}>${{ correct: "Correct", wrong: "Wrong", skipped: "Skipped", timeout: "Out of time" }[c.result]}</i>`}
-        ${c.result && r.step !== "INTRO" && html`<button type="button" class="btn ghost small" onClick=${() => run("rescueOverride", { idx: i, result: c.result === "correct" ? "wrong" : "correct" })} data-testid=${`override-${i}`}>Change to ${c.result === "correct" ? "wrong" : "correct"}</button>`}
-        ${playing && i === r.idx && !c.result && html`
-          ${!c.revealed
-            ? html`<button type="button" class="btn primary" onClick=${() => run("rescueRevealClue")} data-testid="btn-clue-reveal">Reveal clue ${i + 1}</button>`
-            : html`<button type="button" class="btn good" onClick=${() => run("rescueMark", { result: "correct" })} data-testid="btn-clue-correct">Correct</button>
-                <button type="button" class="btn bad" onClick=${() => run("rescueMark", { result: "wrong" })} data-testid="btn-clue-wrong">Wrong</button>`}
-          <button type="button" class="btn ghost" onClick=${() => run("rescueMark", { result: "skipped" })} data-testid="btn-clue-skip">Skip</button>`}
-        ${playing && i === r.idx && c.result && i < 2 && html`<button type="button" class="btn primary" onClick=${() => run("rescueNextClue")} data-testid="btn-clue-next">Go to checkpoint ${i + 2}</button>`}
-      </div>
-    </li>`)}</ol>
-
-    ${r.step === "TIME_UP" && html`<p class="alert">The rescue clock ran out. Unanswered clues count as missed. You can still change a result above.</p>`}
-    ${(r.step === "TIME_UP" || (playing && allMarked)) && html`<button type="button" class="btn primary big" onClick=${() => run("rescueRevealResult")} data-testid="btn-rescue-result">Reveal the rescue result</button>`}
-
-    ${r.step === "RESULT" && html`<div class="outcome ${o.returnCount ? "good" : "bad"}" data-testid="rescue-outcome">
-      <p><b>${o.correct} of 3 correct.</b> ${o.rule}. ${o.returnCount ? `${plural(o.returnCount, "contestant")} of ${o.eliminated} can return.` : "Nobody returns on this result."}</p>
-      ${o.returnCount > 0 && o.returnCount >= o.eliminated && html`<button type="button" class="btn primary big" onClick=${() => run("rescueApply", {})} data-testid="btn-rescue-apply">Return all ${o.eliminated} and get ready for take-off</button>`}
-      ${o.returnCount > 0 && o.returnCount < o.eliminated && html`
-        <div class="seg small" role="radiogroup" aria-label="How returning contestants are chosen">
-          <label class=${mode === "random" ? "on" : ""}><input type="radio" checked=${mode === "random"} onChange=${() => setMode("random")} data-testid="apply-random" />Draw ${o.returnCount} at random</label>
-          <label class=${mode === "manual" ? "on" : ""}><input type="radio" checked=${mode === "manual"} onChange=${() => setMode("manual")} data-testid="apply-manual" />I choose up to ${o.returnCount}</label>
-        </div>
-        ${mode === "manual" && html`<${PickPeople} people=${out} value=${ids} onChange=${setIds} max=${o.returnCount} testid="return-pick" />`}
-        <button type="button" class="btn primary big" disabled=${mode === "manual" && !ids.length} onClick=${() => run("rescueApply", { mode, ids })} data-testid="btn-rescue-apply">${mode === "random" ? `Draw ${o.returnCount} and return them` : `Return ${plural(ids.length, "contestant")}`}</button>`}
-      ${o.returnCount === 0 && html`<div class="row">
-        <button type="button" class="btn primary" onClick=${() => run("rescueRetry")} data-testid="btn-rescue-retry">Retry the rescue</button>
-        <button type="button" class="btn warn" onClick=${() => run("emergencyRule", {})} disabled=${view.rescue.emergencyRule === "hostPick"} data-testid="btn-rule-after-fail">Use the emergency rule: ${EMERGENCY_RULES[view.rescue.emergencyRule].toLowerCase()}</button>
-      </div>`}
-    </div>`}
+  return html`<div class="rescue-panel" data-testid="rescue-panel">
+    <div class="row between"><b>Rescue game${r.attempt > 1 ? `, round ${r.attempt}` : ""}</b><button type="button" class="btn ghost small" onClick=${() => confirm("Leave the rescue game and go back to the emergency screen?") && run("rescueAbort")} data-testid="btn-rescue-leave">Leave rescue</button></div>
+    <p class="note">The projector shows the rules of "${view.rescue.title}". Play the game in the room, then tick who won their way back on board.</p>
+    <div class="row"><button type="button" class="btn ghost small" onClick=${() => setIds(out.map((c) => c.id))} data-testid="return-all">Select everyone</button><button type="button" class="btn ghost small" onClick=${() => setIds([])}>Clear</button><span class="muted">${ids.length} of ${out.length} selected</span></div>
+    <${PickPeople} people=${out} value=${ids} onChange=${setIds} testid="return-pick" />
+    <button type="button" class="btn primary big" disabled=${!ids.length} onClick=${() => run("rescueApply", { ids })} data-testid="btn-rescue-apply">Return ${plural(ids.length, "contestant")} to the flight</button>
     <${EmergencyExits} view=${view} />
   </div>`;
 }

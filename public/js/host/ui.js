@@ -24,8 +24,8 @@ export const PHASE_TEXT = {
   ANSWER_REVEALED: ["Answer on screen", "The correct answer is showing."],
   ELIMINATION_REVIEW: ["Checking boards", "Mark who got it wrong, then confirm."],
   READY_TO_FLY: ["Between questions", "The plane is waiting at the destination."],
-  ALL_ELIMINATED: ["Everyone is out", "The projector shows the emergency screen. Nothing moves until you start a rescue or an emergency return."],
-  RESCUE: ["Rescue mission", "MAYDAY! Save the flight!"],
+  ALL_ELIMINATED: ["Everyone is out", "The projector shows the emergency screen. Nothing moves until you start the rescue game or an emergency return."],
+  RESCUE: ["Rescue game", "The projector shows the rescue game rules. Return the winners when the game is over."],
   FINISHED: ["Show finished", "The projector shows the finale."],
 };
 

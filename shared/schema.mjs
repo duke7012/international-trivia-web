@@ -174,6 +174,7 @@ export const SOUND_CUES = [
   { id: "correct", label: "Correct answer appears", when: "Plays as the answer appears.", match: /correct_answer(?!_reveal)/i },
   { id: "congrats", label: "After the correct answer", when: "Plays straight after the one above.", match: /congratulations/i },
   { id: "elimination", label: "Checking eliminations", when: "Loops while you mark who is out.", match: /contestant_elimination|elimination/i },
+  { id: "rescueGame", label: "Rescue game", when: "Loops while the rescue game's rules are on the projector.", match: /rescue|mayday/i },
 ];
 export const cueForFile = (name) => SOUND_CUES.find((c) => c.match.test(name || ""))?.id || null;
 export const LATE_STAGE_STOP = 16; // from this destination on, the countdown uses the "drums" music
@@ -197,7 +198,6 @@ export function difficultyForStop(stop, settings) {
 
 // ---- Rescue content (kept apart from the main question bank) ----
 
-export const RESCUE_RULE_TYPES = ["all", "half", "upTo", "none"];
 export const EMERGENCY_RULES = {
   returnLastOut: "Everyone knocked out on the last question returns",
   returnAll: "Every eliminated contestant returns",
@@ -205,57 +205,27 @@ export const EMERGENCY_RULES = {
   endShow: "The show ends here",
 };
 
+// The rescue is a physical game the eliminated contestants play in the room. The app only shows
+// its rules on the projector; the host then picks who won their way back on board.
+export const DEFAULT_GAME_RULES = [
+  "Every eliminated passenger plays.",
+  "Listen to the host for how the game works.",
+  "Winners get back on the flight.",
+].join("\n");
+
 export function defaultRescue() {
-  return {
-    clues: [],
-    timerSec: 90,
-    rules: { 3: { type: "all" }, 2: { type: "half" }, 1: { type: "upTo", n: 3 }, 0: { type: "none" } },
-    emergencyRule: "returnLastOut",
-  };
+  return { title: "Rescue game", rules: DEFAULT_GAME_RULES, emergencyRule: "returnLastOut" };
 }
 
-export function normalizeClue(c, id) {
-  const img = c.image && str(c.image.src).trim() ? normalizeMedia(c.image) : null;
-  return {
-    id,
-    prompt: str(c.prompt, 300).trim(),
-    image: img && mediaKind(img) !== "video" && mediaKind(img) !== "audio" ? img : null,
-    answer: str(c.answer, 120).trim(),
-    variants: (Array.isArray(c.variants) ? c.variants : str(c.variants).split(/[\n;]/)).map((v) => str(v, 120).trim()).filter(Boolean).slice(0, 12),
-    hostNotes: str(c.hostNotes, 400).trim(),
-  };
-}
-
-export const clueReady = (c) => !!c.answer && (!!c.prompt || !!c.image);
-
-export function normalizeRescue(r = {}, makeId) {
+export function normalizeRescue(r = {}) {
   const d = defaultRescue();
-  const rules = {};
-  for (const k of [3, 2, 1, 0]) {
-    const x = (r.rules && r.rules[k]) || d.rules[k];
-    const type = RESCUE_RULE_TYPES.includes(x.type) ? x.type : d.rules[k].type;
-    rules[k] = type === "upTo" ? { type, n: Math.round(num(x.n, 1, 999, 3)) } : { type };
-  }
   return {
-    clues: (Array.isArray(r.clues) ? r.clues : []).slice(0, 60).map((c) => normalizeClue(c, c.id || makeId())),
-    timerSec: Math.round(num(r.timerSec, 15, 900, d.timerSec)),
-    rules,
+    title: str(r.title, 80).trim() || d.title,
+    // Older saves kept a table of return rules under "rules"; only text counts now.
+    rules: typeof r.rules === "string" ? str(r.rules, 2000).trim() : d.rules,
     emergencyRule: EMERGENCY_RULES[r.emergencyRule] ? r.emergencyRule : d.emergencyRule,
   };
 }
 
-// How many eliminated contestants a rule lets back in.
-export function rescueReturnCount(rule, eliminated) {
-  if (!rule || eliminated <= 0) return 0;
-  if (rule.type === "all") return eliminated;
-  if (rule.type === "half") return Math.ceil(eliminated / 2);
-  if (rule.type === "upTo") return Math.min(rule.n || 0, eliminated);
-  return 0;
-}
-
-export function describeRule(rule) {
-  if (rule.type === "all") return "Everyone returns";
-  if (rule.type === "half") return "Half return, rounded up";
-  if (rule.type === "upTo") return `Up to ${rule.n} return`;
-  return "Nobody returns: host uses the emergency rule";
-}
+// The rules as the projector lists them: one per non-empty line.
+export const ruleLines = (text) => String(text || "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 12);

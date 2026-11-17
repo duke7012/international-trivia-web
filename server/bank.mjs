@@ -18,7 +18,7 @@ export function hydrate(name, raw = {}) {
   return {
     name,
     questions: padBank(raw.questions),
-    rescue: normalizeRescue(raw.rescue || defaultRescue(), newId),
+    rescue: normalizeRescue(raw.rescue || defaultRescue()),
     settings: normalizeSettings(raw.settings || {}),
     session: { ...newSession(), ...(raw.session || {}) },
   };
@@ -30,7 +30,7 @@ export function demoContent(seedQuestions, seedRescue, now) {
     const q = normalizeQuestion(raw, newId());
     return { ...q, status: isBlank(q) ? "empty" : "published", updatedAt: now };
   });
-  return { questions: padBank(questions), rescue: normalizeRescue(seedRescue || defaultRescue(), newId) };
+  return { questions: padBank(questions), rescue: normalizeRescue(seedRescue || defaultRescue()) };
 }
 
 // File names of every media file something still points at.
@@ -38,8 +38,6 @@ export function mediaRefs(ws, extra = []) {
   const refs = new Set(extra);
   const add = (m) => m && m.src && refs.add(m.src.split("/").pop());
   ws.questions.forEach((q) => add(q.media));
-  ws.rescue.clues.forEach((c) => add(c.image));
   add(ws.session.shown?.question?.media);
-  ws.session.rescue?.clues.forEach((c) => add(c.image));
   return refs;
 }
