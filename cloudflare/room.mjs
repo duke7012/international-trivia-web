@@ -3,7 +3,7 @@
 // (server/show.mjs), so the rules cannot differ between the laptop and the cloud.
 //
 // State is saved in the object's own storage on every change. Screens stay connected with
-// server-sent events. Deadlines (landing, time up, rescue clock) use an alarm, so they fire
+// server-sent events. Deadlines (landing, time up) use an alarm, so they fire
 // even if no screen is connected.
 import { DurableObject } from "cloudflare:workers";
 import { createShow } from "../server/show.mjs";

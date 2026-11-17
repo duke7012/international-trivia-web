@@ -1,14 +1,13 @@
 // The projector. It only ever draws what the server says is public right now:
 // it holds no question before SHOW QUESTION and no answer before REVEAL ANSWER.
-import { html, render, useEffect, useMemo, useRef, useState } from "/vendor/preact/htm-preact.module.js";
+import { html, render, useEffect, useRef, useState } from "/vendor/preact/htm-preact.module.js";
 import { connect, clock, plural } from "../net.js";
 import { createWorld, ZONES, zoneOf, STOPS } from "./world.js";
-import { QuestionCard, useRemaining } from "../stage.js";
+import { QuestionCard } from "../stage.js";
 import { sfx, play } from "./sfx.js";
 import { createCuePlayer } from "./cues.js";
 import { answerShowing } from "/shared/cues.mjs";
 import { LATE_STAGE_STOP } from "/shared/schema.mjs";
-import { mapDots, ROUTE, legPath } from "./map.js";
 
 const params = new URLSearchParams(location.search);
 const MONITOR = params.has("monitor"); // the small silent copy inside the host dashboard
@@ -38,16 +37,8 @@ function sounds(prev, v) {
   if (to("FINISHED")) play.goldenBell();
   if (v.lastRescue && !prev.lastRescue) play.fanfare();
   if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight" && !own("flight")) play.takeoff();
-  const r = v.rescue, pr = prev.rescue;
-  if (r) {
-    if (!pr || pr.attempt !== r.attempt) play.mayday();
-    else {
-      r.clues.forEach((c, i) => { if (c.result && c.result !== pr.clues[i].result && r.step !== "TIME_UP") { play.stamp(); setTimeout(c.result === "correct" ? play.right : play.wrong, 220); } });
-      if (r.step === "TIME_UP" && pr.step !== "TIME_UP") play.timeUp();
-      if (r.step === "RESULT" && pr.step !== "RESULT") (r.outcome.returnCount > 0 ? play.fanfare : play.wrong)();
-      if (r.step === "CLUES" && pr.step === "CLUES" && r.clues[r.idx].revealed && !pr.clues[r.idx]?.revealed) play.card();
-    }
-  }
+  // A new rescue game: the built-in alarm, unless the host has their own music for it.
+  if (v.rescue && prev.rescue?.attempt !== v.rescue.attempt && !own("rescueGame")) play.mayday();
 }
 
 function sceneFor(v) {
@@ -134,80 +125,20 @@ function AllOut({ v }) {
     <div class="alarm-in">
       <p class="alarm-kicker"><i class="lamp"></i>Emergency landing at destination ${v.stop}</p>
       <h1>Every passenger is out</h1>
-      <p class="alarm-sub">The flight cannot continue. Stand by for a rescue mission.</p>
+      <p class="alarm-sub">The flight cannot continue. Stand by for the rescue game.</p>
     </div>
   </section>`;
 }
 
-function Clock({ clock: c, stopped }) {
-  const ms = useRemaining({ ...c, idle: false });
-  const s = Math.ceil(ms / 1000 - 0.001), mm = Math.floor(s / 60), ss = String(s % 60).padStart(2, "0");
-  return html`<div class="rclock ${c.running ? (s <= 10 ? "urgent" : "running") : c.started && !stopped ? "paused" : "idle"}" data-testid="rescue-clock"><b>${mm}:${ss}</b><span>${c.running ? "rescue clock" : c.started ? (s <= 0 ? "time is up" : stopped ? "clock stopped" : "clock paused") : stopped ? "clock not used" : "clock ready"}</span></div>`;
-}
-
-const STAMP = { correct: "Cleared", wrong: "Missed", skipped: "Skipped", timeout: "Out of time" };
-
 function Rescue({ v }) {
   const r = v.rescue;
-  const dots = useMemo(() => mapDots(), []);
-  if (r.step === "INTRO") {
-    return html`<section class="alarm mayday" data-testid="rescue-intro">
-      <div class="hazard top"></div><div class="hazard bottom"></div>
-      <div class="alarm-in">
-        <p class="alarm-kicker"><i class="lamp"></i>Rescue mission${r.attempt > 1 ? `, attempt ${r.attempt}` : ""}</p>
-        <h1>Mayday! Save the flight!</h1>
-        <p class="alarm-sub">The route is broken in three places. Name three destinations to repair it.</p>
-        ${r.crew.length > 0 && html`<p class="crew"><span>Rescue crew</span>${r.crew.join(", ")}</p>`}
-      </div>
-    </section>`;
-  }
-  const cur = r.clues[r.idx];
-  const allFixed = r.clues.every((c) => c.result === "correct");
-  const o = r.outcome;
-  return html`<section class="rescue" data-testid="rescue-board" data-step=${r.step}>
+  return html`<section class="rescue" data-testid="rescue-game">
     <div class="hazard top"></div>
-    <header class="rescue-head"><h1>Mayday! Save the flight!</h1><${Clock} clock=${r.clock} stopped=${r.step !== "MAP" && r.clues.every((c) => c.result)} /></header>
-    <div class="rescue-map">
-      <svg viewBox="0 0 1000 500" role="img" aria-label="World map with a broken flight route">
-        <g class="dots">${dots.map(([x, y]) => html`<circle cx=${x} cy=${y} r="2.6" />`)}</g>
-        ${[0, 1, 2, 3].map((i) => {
-          const fixed = i < 3 ? r.clues[i].result === "correct" : allFixed;
-          return html`<path class="leg ${fixed ? "fixed" : "broken"}" d=${legPath(i)} pathLength="100" data-testid=${`leg-${i}`} data-fixed=${String(fixed)} />`;
-        })}
-        <g class="end"><circle cx=${ROUTE[0][0]} cy=${ROUTE[0][1]} r="9" /><circle cx=${ROUTE[4][0]} cy=${ROUTE[4][1]} r="9" /></g>
-        ${r.clues.map((c, i) => {
-          const [x, y] = ROUTE[i + 1];
-          return html`<g class="cp ${c.result || (i === r.idx ? "current" : "todo")}" transform=${`translate(${x} ${y})`} data-testid=${`checkpoint-${i}`} data-result=${c.result || ""}>
-            <circle r="26" class="cp-ring" /><circle r="19" class="cp-core" />
-            <text y="8">${c.result === "correct" ? "✓" : c.result ? "✕" : i + 1}</text>
-            ${c.result && html`<g class="pstamp ${c.result}" transform="translate(0 62) rotate(${[-7, 5, -4][i]})">
-              <rect x="-96" y="-27" width="192" height="54" rx="8" />
-              <text class="ps-top" y="-7">${STAMP[c.result]}</text>
-              <text class="ps-ans" y="15">${(c.answer || "").slice(0, 22)}</text>
-            </g>`}
-          </g>`;
-        })}
-      </svg>
-    </div>
-    <div class="rescue-side">
-      ${r.step === "RESULT"
-        ? html`<div class="rescue-result ${o.returnCount > 0 ? "good" : "bad"}" data-testid="rescue-result">
-            <p class="card-kicker">Rescue result</p>
-            <h2>${o.correct} of 3 repaired</h2>
-            <p class="big">${o.returnCount > 0 ? (o.returnCount >= o.eliminated ? "Every passenger can return" : `${plural(o.returnCount, "passenger")} can return`) : "The route stays broken"}</p>
-            <p class="sub">${o.returnCount > 0 ? o.rule : "The host decides what happens next."}</p>
-          </div>`
-        : r.step === "TIME_UP"
-        ? html`<div class="rescue-result bad" data-testid="rescue-timeup"><p class="card-kicker">Rescue clock</p><h2>Out of time</h2><p class="sub">Stand by for the result.</p></div>`
-        : html`<div class="clue ${cur.revealed ? "shown" : ""}" data-testid="clue">
-            <p class="card-kicker">Checkpoint ${r.idx + 1} of 3</p>
-            ${cur.revealed
-              ? html`${cur.image && html`<div class="clue-img"><img src=${cur.image.src} alt="" style=${`object-fit:${cur.image.fit}`} /></div>`}
-                  ${cur.prompt && html`<p class="clue-text ${cur.image ? "small" : ""}" data-testid="clue-text">${cur.prompt}</p>`}`
-              : html`<p class="clue-wait"><i class="pulse"></i>${r.step === "MAP" ? "Three checkpoints are missing" : "Next clue coming up"}</p>`}
-          </div>`}
-      ${r.crew.length > 0 && html`<p class="crew small"><span>Rescue crew</span>${r.crew.join(", ")}</p>`}
-    </div>
+    <p class="alarm-kicker"><i class="lamp"></i>Mayday! Save the flight!${r.attempt > 1 ? ` Round ${r.attempt}` : ""}</p>
+    <h1 data-testid="rescue-title">${r.title}</h1>
+    <ol class="game-rules ${r.rules.length > 6 ? "many" : ""}" data-testid="rescue-rules">
+      ${r.rules.map((line, i) => html`<li style=${`animation-delay:${0.25 + i * 0.12}s`}>${line}</li>`)}
+    </ol>
   </section>`;
 }
 

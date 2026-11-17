@@ -1,8 +1,8 @@
 // Rules of the show, tested without a browser or a server.  Run: npm test
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reduce, newSession, due, ShowError, active, eliminated, nextFixed, topicOptions, rescueOutcome, QUESTION_PHASES } from "../shared/engine.mjs";
-import { emptyQuestion, normalizeQuestion, publishErrors, defaultSettings, defaultRescue, normalizeRescue, rescueReturnCount, TOTAL_STOPS } from "../shared/schema.mjs";
+import { reduce, newSession, due, ShowError, active, eliminated, nextFixed, topicOptions, QUESTION_PHASES } from "../shared/engine.mjs";
+import { emptyQuestion, normalizeQuestion, publishErrors, defaultSettings, defaultRescue, normalizeRescue, ruleLines, TOTAL_STOPS } from "../shared/schema.mjs";
 
 let seq = 0;
 const q = (over = {}) => ({
@@ -10,10 +10,9 @@ const q = (over = {}) => ({
   status: over.status || "published", updatedAt: 1,
 });
 const bank = (...filled) => [...filled, ...Array.from({ length: TOTAL_STOPS - filled.length }, (_, i) => emptyQuestion(`e${i}`))];
-const clues = (n = 3) => Array.from({ length: n }, (_, i) => ({ id: `c${i}`, prompt: `Clue ${i}`, answer: `Ans ${i}` }));
 const makeCtx = (over = {}) => {
   let n = 0;
-  return { now: 1000, questions: bank(q(), q(), q()), settings: defaultSettings(), rescue: normalizeRescue({ clues: clues() }, () => "x"), random: () => 0, id: () => `p${++n}`, ...over };
+  return { now: 1000, questions: bank(q(), q(), q()), settings: defaultSettings(), rescue: defaultRescue(), random: () => 0, id: () => `p${++n}`, ...over };
 };
 const run = (s, ctx, ...steps) => steps.reduce((acc, step) => reduce(acc, typeof step === "string" ? { type: step } : { type: step[0], payload: step[1] }, ctx), s);
 const roster = (ctx, ...names) => run(newSession(), ctx, ["addContestants", { names }]);
@@ -73,7 +72,7 @@ test("steps cannot be taken out of order", () => {
   for (const bad of ["revealAnswer", "fly", "showQuestion"]) assert.throws(() => run(visible, ctx, bad), ShowError);
 });
 
-test("the clock only lands the plane, raises boards, or ends the rescue clock", () => {
+test("the clock only lands the plane or raises boards", () => {
   const ctx = makeCtx();
   let s = run(roster(ctx, "Ana"), ctx, "fly");
   assert.equal(due(s, 1000 + 7999), null);
@@ -135,110 +134,63 @@ test("eliminating everyone enters ALL_ELIMINATED and waits for the host", () => 
   assert.throws(() => run(s, ctx, "fly"), ShowError);
 });
 
-test("there is no rescue while anyone is still in the game", () => {
+test("there is no rescue game while anyone is still in the game", () => {
   const ctx = makeCtx();
-  const s = roster(ctx, "Ana");
-  assert.throws(() => run(s, ctx, ["startRescue", { crewIds: [s.contestants[0].id] }]), ShowError);
+  assert.throws(() => run(roster(ctx, "Ana"), ctx, "startRescue"), ShowError);
 });
 
-test("rescue crew is one to three eliminated contestants", () => {
+test("the rescue game is started by the host and never ends by itself", () => {
   const ctx = makeCtx();
-  const s = knockOutAll(roster(ctx, "A", "B", "C", "D"), ctx);
+  const s = run(knockOutAll(roster(ctx, "A", "B", "C"), ctx), ctx, "startRescue");
+  assert.equal(s.phase, "RESCUE");
+  assert.deepEqual(s.rescue, { attempt: 1 });
+  assert.equal(due(s, 9e9), null, "the game has no clock of its own");
+  assert.equal(eliminated(s).length, 3, "nobody returns until the host picks the winners");
+  assert.throws(() => run(s, ctx, "fly"), ShowError);
+});
+
+test("the host returns the winners, and the journey skips the question that caused the wipe-out", () => {
+  const ctx = makeCtx();
+  let s = run(knockOutAll(roster(ctx, "A", "B", "C", "D"), ctx), ctx, "startRescue");
   const ids = s.contestants.map((c) => c.id);
-  assert.throws(() => run(s, ctx, ["startRescue", { crewIds: [] }]), /one, two or three/);
-  assert.throws(() => run(s, ctx, ["startRescue", { crewIds: ids }]), /one, two or three/);
-  assert.equal(run(s, ctx, ["startRescue", { crewIds: ids.slice(0, 3) }]).rescue.step, "INTRO");
-});
-
-const playRescue = (s, ctx, results) => {
-  s = run(s, ctx, ["startRescue", { crewIds: [s.contestants[0].id] }], "rescueShowMap");
-  results.forEach((r, i) => {
-    s = run(s, ctx, "rescueRevealClue", ["rescueMark", { result: r }]);
-    if (i < 2) s = run(s, ctx, "rescueNextClue");
-  });
-  return run(s, ctx, "rescueRevealResult");
-};
-
-test("three correct returns everyone, and the journey skips the question that caused the wipe-out", () => {
-  const ctx = makeCtx();
-  let s = playRescue(knockOutAll(roster(ctx, "A", "B", "C", "D", "E"), ctx), ctx, ["correct", "correct", "correct"]);
-  assert.equal(rescueOutcome(s, ctx.rescue).returnCount, 5);
-  s = run(s, ctx, ["rescueApply", {}]);
+  assert.throws(() => run(s, ctx, ["rescueApply", { ids: [] }]), /Pick who won/);
+  assert.throws(() => run(s, ctx, ["rescueApply", { ids: ["nobody"] }]), /Only eliminated/);
+  s = run(s, ctx, ["rescueApply", { ids: ids.slice(0, 2) }]);
   assert.equal(s.phase, "READY_TO_FLY");
-  assert.equal(active(s).length, 5);
+  assert.deepEqual(active(s).map((c) => c.id), ids.slice(0, 2));
+  assert.deepEqual(s.lastRescue.returnedIds, ids.slice(0, 2));
+  assert.equal(s.lastRescue.via, "rescue");
   const firstQuestion = s.played[0].questionId;
   s = run(s, ctx, "fly");
   assert.equal(s.stop, 2);
   assert.notEqual(s.currentQuestionId, firstQuestion);
 });
 
-test("two correct returns half, rounded up; one correct returns up to three", () => {
+test("leaving the rescue game goes back to the emergency screen; a second game counts as round 2", () => {
   const ctx = makeCtx();
-  const out5 = knockOutAll(roster(ctx, "A", "B", "C", "D", "E"), ctx);
-  assert.equal(rescueOutcome(playRescue(out5, ctx, ["correct", "wrong", "correct"]), ctx.rescue).returnCount, 3);
-  assert.equal(rescueOutcome(playRescue(out5, ctx, ["wrong", "skipped", "correct"]), ctx.rescue).returnCount, 3);
-  const out2 = knockOutAll(roster(makeCtx(), "A", "B"), ctx);
-  assert.equal(rescueOutcome(playRescue(out2, ctx, ["correct", "wrong", "wrong"]), ctx.rescue).returnCount, 2);
-  assert.equal(rescueReturnCount({ type: "half" }, 7), 4);
+  const s = run(knockOutAll(roster(ctx, "A", "B"), ctx), ctx, "startRescue", "rescueAbort");
+  assert.equal(s.phase, "ALL_ELIMINATED");
+  assert.equal(s.rescue, null);
+  assert.equal(run(s, ctx, "startRescue").rescue.attempt, 2);
 });
 
-test("partial rescue: manual picks are limited to the eliminated and to the allowed number; random never exceeds it", () => {
+test("emergency exits work from the emergency screen and during the rescue game, so the show is never stuck", () => {
   const ctx = makeCtx();
-  const s = playRescue(knockOutAll(roster(ctx, "A", "B", "C", "D", "E", "F"), ctx), ctx, ["correct", "correct", "wrong"]); // half of 6 = 3
-  const ids = s.contestants.map((c) => c.id);
-  assert.throws(() => run(s, ctx, ["rescueApply", { mode: "manual", ids: ids.slice(0, 4) }]), /at most 3/);
-  assert.throws(() => run(s, ctx, ["rescueApply", { mode: "manual", ids: ["nobody"] }]), /Only eliminated/);
-  const manual = run(s, ctx, ["rescueApply", { mode: "manual", ids: ids.slice(0, 2) }]);
-  assert.deepEqual(active(manual).map((c) => c.id), ids.slice(0, 2));
-  const random = run(s, ctx, ["rescueApply", { mode: "random" }]);
-  assert.equal(active(random).length, 3);
-});
-
-test("zero correct returns nobody; the host can retry or use the emergency rule, so the show is never stuck", () => {
-  const ctx = makeCtx({ rescue: normalizeRescue({ clues: clues(6) }, () => "x") });
-  const s = playRescue(knockOutAll(roster(ctx, "A", "B"), ctx), ctx, ["wrong", "wrong", "skipped"]);
-  assert.equal(rescueOutcome(s, ctx.rescue).returnCount, 0);
-  assert.throws(() => run(s, ctx, ["rescueApply", {}]), /returns nobody/);
-  const retry = run(s, ctx, "rescueRetry");
-  assert.equal(retry.rescue.step, "INTRO");
-  assert.equal(retry.rescue.attempt, 2);
-  assert.notDeepEqual(retry.rescue.clues.map((c) => c.id), s.rescue.clues.map((c) => c.id), "a retry uses fresh clues when there are any");
-  const rule = run(s, ctx, "emergencyRule");
+  const out = knockOutAll(roster(ctx, "A", "B"), ctx);
+  const back = run(out, ctx, ["emergencyReturn", { ids: [out.contestants[1].id] }]);
+  assert.equal(back.phase, "READY_TO_FLY");
+  assert.deepEqual(active(back).map((c) => c.name), ["B"]);
+  const rule = run(out, ctx, "startRescue", "emergencyRule");
   assert.equal(rule.phase, "READY_TO_FLY");
   assert.equal(active(rule).length, 2);
 });
 
-test("a host-authorised emergency return works straight from ALL_ELIMINATED, even with no rescue clues", () => {
-  const ctx = makeCtx({ rescue: defaultRescue() });
-  const s = knockOutAll(roster(ctx, "A", "B"), ctx);
-  assert.throws(() => run(s, ctx, ["startRescue", { crewIds: [s.contestants[0].id] }]), /three ready clues/);
-  const back = run(s, ctx, ["emergencyReturn", { ids: [s.contestants[1].id] }]);
-  assert.equal(back.phase, "READY_TO_FLY");
-  assert.deepEqual(active(back).map((c) => c.name), ["B"]);
-});
-
-test("the rescue clock is host-started, pausable, and times out into TIME_UP without applying anything", () => {
-  const ctx = makeCtx();
-  let s = run(knockOutAll(roster(ctx, "A"), ctx), ctx, ["startRescue", { crewIds: ["p1"] }], "rescueShowMap", "rescueRevealClue");
-  assert.equal(s.rescue.clock.running, false, "revealing a clue does not start the clock");
-  s = run(s, ctx, ["rescueClock", { op: "start" }]);
-  assert.equal(s.rescue.clock.deadline, 1000 + 90_000);
-  s = reduce(s, { type: "rescueClock", payload: { op: "pause" } }, { ...ctx, now: 31_000 });
-  assert.equal(s.rescue.clock.remainingMs, 60_000);
-  s = reduce(s, { type: "rescueClock", payload: { op: "start" } }, { ...ctx, now: 50_000 });
-  assert.deepEqual(due(s, 110_000), { type: "rescueTimeUp" });
-  s = run(s, ctx, "rescueTimeUp");
-  assert.equal(s.rescue.step, "TIME_UP");
-  assert.equal(eliminated(s).length, 1, "nobody returns until the host applies a result");
-  s = run(s, ctx, ["rescueOverride", { idx: 0, result: "correct" }], "rescueRevealResult");
-  assert.equal(rescueOutcome(s, ctx.rescue).correct, 1);
-});
-
-test("changed thresholds are honoured", () => {
-  const rescue = normalizeRescue({ clues: clues(), rules: { 3: { type: "all" }, 2: { type: "upTo", n: 1 }, 1: { type: "none" }, 0: { type: "none" } } }, () => "x");
-  const ctx = makeCtx({ rescue });
-  const s = playRescue(knockOutAll(roster(ctx, "A", "B", "C"), ctx), ctx, ["correct", "correct", "wrong"]);
-  assert.equal(rescueOutcome(s, rescue).returnCount, 1);
+test("rescue content: a title and one rule per line; older clue-based saves fall back to the defaults", () => {
+  assert.deepEqual(ruleLines("  Run to the wall \n\n Touch it\n"), ["Run to the wall", "Touch it"]);
+  const old = normalizeRescue({ clues: [{ prompt: "x", answer: "y" }], timerSec: 90, rules: { 3: { type: "all" } }, emergencyRule: "returnAll" });
+  assert.deepEqual(old, { ...defaultRescue(), emergencyRule: "returnAll" });
+  assert.equal(normalizeRescue({ title: "  ", rules: "Hop" }).title, defaultRescue().title);
+  assert.equal(normalizeRescue({ title: "Musical chairs", rules: "Hop" }).rules, "Hop");
 });
 
 test("topic choice draws an unused published question of the stop's difficulty, and explains why a topic is closed", () => {
@@ -315,6 +267,7 @@ test("the user's file names are matched to the right moments", () => {
     "goldenbell_game_congratulations.mp3": "congrats",
     "goldenbell_game_contestant_answer_reveal_loop.mp3": "boardsLoop",
     "goldenbell_game_contestant_elimination.mp3": "elimination",
+    "rescue_game_music.mp3": "rescueGame",
   };
   for (const [name, id] of Object.entries(files)) assert.equal(cueForFile(name), id, name);
   assert.equal(new Set(Object.values(files)).size, SOUND_CUES.length, "every moment has a file");
@@ -386,6 +339,10 @@ test("which sound plays when", () => {
 
   assert.deepEqual(planAudio(v({ phase: "ELIMINATION_REVIEW" }), 0).steps, [{ cue: "elimination", loop: true }]);
   assert.equal(planAudio(v({ phase: "READY_TO_FLY" }), 0), null);
+  assert.equal(planAudio(v({ phase: "ALL_ELIMINATED" }), 0), null, "the emergency screen keeps its alarm");
+  const rescue = planAudio(v({ phase: "RESCUE", rescue: { attempt: 1 } }), 0);
+  assert.deepEqual(rescue.steps, [{ cue: "rescueGame", loop: true }], "music loops through the rescue game");
+  assert.notEqual(planAudio(v({ phase: "RESCUE", rescue: { attempt: 2 } }), 0).key, rescue.key, "a second game starts the music again");
 
   // with only some files supplied, only those play
   assert.equal(planAudio({ phase: "BOARDS_UP", stop: 1, cues: {} }, 0), null);

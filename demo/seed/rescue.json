@@ -1,42 +1,5 @@
 {
- "timerSec": 90,
- "clues": [
-  {
-   "prompt": "The Statue of Liberty stands in this city's harbour.",
-   "answer": "New York",
-   "variants": [
-    "New York City",
-    "NYC"
-   ]
-  },
-  {
-   "prompt": "The Colosseum is in this city.",
-   "answer": "Rome",
-   "variants": [
-    "Roma"
-   ]
-  },
-  {
-   "prompt": "The Eiffel Tower is in this city.",
-   "answer": "Paris"
-  },
-  {
-   "prompt": "Which country flies this flag?",
-   "answer": "Japan",
-   "image": {
-    "src": "/media/demo/d04.svg",
-    "name": "d04.svg",
-    "mime": "image/svg+xml",
-    "fit": "contain"
-   }
-  },
-  {
-   "prompt": "The Great Pyramid of Giza is in this country.",
-   "answer": "Egypt"
-  },
-  {
-   "prompt": "The Sydney Opera House is in this country.",
-   "answer": "Australia"
-  }
- ]
+ "title": "Paper plane relay",
+ "rules": "Everyone who is out plays.\nFold a paper plane in 60 seconds.\nThrow it from behind the line.\nThe three longest flights get back on board.",
+ "emergencyRule": "returnLastOut"
 }

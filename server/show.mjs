@@ -63,7 +63,7 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       ws.questions.splice(dest, 0, q);
       store.save(ws, "questions");
     },
-    "rescue.save"(ws, { rescue }) { ws.rescue = normalizeRescue(rescue, newId); store.save(ws, "rescue"); },
+    "rescue.save"(ws, { rescue }) { ws.rescue = normalizeRescue(rescue); store.save(ws, "rescue"); },
     // The host's own sound files, shared by the live show and the demo set.
     "sounds.save"(_, { sounds }) { store.app.sounds = normalizeSounds(sounds); store.saveApp(); store.sweepSounds(store.app.sounds); },
     "settings.save"(ws, { settings }) { ws.settings = normalizeSettings({ ...ws.settings, ...settings }); store.save(ws, "settings"); },
@@ -110,7 +110,7 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       return result;
     },
 
-    // The clock's only powers: land the plane, raise the boards, end the rescue clock.
+    // The clock's only powers: land the plane and raise the boards.
     // Returns true when something changed.
     tick() {
       const a = due(store.current.session, now());
@@ -123,7 +123,6 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       const s = store.current.session;
       if (s.phase === "FLIGHT_ANIMATING" && s.flight) return s.flight.startedAt + s.flight.durationMs;
       if (s.phase === "TIMER_RUNNING" && s.timer.running) return s.timer.deadline;
-      if (s.phase === "RESCUE" && s.rescue.clock.running) return s.rescue.clock.deadline;
       return null;
     },
 
