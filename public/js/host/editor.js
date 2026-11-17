@@ -1,10 +1,10 @@
-// Questions tab: the 30 numbered slots and the editor.
+// Questions tab: the numbered slots (30 for the journey, plus any extra topic-pick ones) and the editor.
 // Saving here never moves the show: the projector keeps what it has until the host updates it.
 import { html, useEffect, useMemo, useRef, useState } from "/vendor/preact/htm-preact.module.js";
 import { clock } from "../net.js";
 import { QuestionCard } from "../stage.js";
 import { mediaReduce, idleMedia, QUESTION_PHASES } from "/shared/engine.mjs";
-import { DIFFICULTIES, PRESENTATIONS, PRESENTATION_LABEL, FORMAT_LABEL, normalizeQuestion, publishErrors, draftWarnings, answerText } from "/shared/schema.mjs";
+import { DIFFICULTIES, PRESENTATIONS, PRESENTATION_LABEL, FORMAT_LABEL, TOTAL_STOPS, MAX_QUESTIONS, normalizeQuestion, publishErrors, draftWarnings, answerText } from "/shared/schema.mjs";
 import { run, say, excerpt, Field, MediaPicker, MediaControls, toStageMedia } from "./ui.js";
 
 const blankForm = (q) => ({
@@ -21,7 +21,8 @@ function SlotList({ view, selected, onSelect }) {
     ${view.questions.map((q, i) => {
       const live = view.session.currentQuestionId === q.id && !["LOBBY", "READY_TO_FLY", "FINISHED", "ALL_ELIMINATED", "RESCUE"].includes(view.session.phase);
       const issues = q.status === "draft" ? view.checks[i]?.errors.length : 0;
-      return html`<li class="slot ${q.status} ${selected === q.id ? "selected" : ""}" data-testid=${`slot-${i + 1}`} data-status=${q.status}>
+      return html`${i === TOTAL_STOPS && html`<li class="extra-divider" data-testid="extra-divider"><b>Extra questions</b><span>Only played when a contestant picks a topic</span></li>`}
+      <li class="slot ${q.status} ${selected === q.id ? "selected" : ""}" data-testid=${`slot-${i + 1}`} data-status=${q.status}>
         <button type="button" onClick=${() => onSelect(q.id)}>
           <b class="slot-num">${i + 1}</b>
           <span class="slot-main">
@@ -72,8 +73,12 @@ export function QuestionsTab({ view }) {
   if (index >= 0) lastIndex.current = index;
   const normalized = useMemo(() => normalizeQuestion(form, selected), [form, selected]);
 
-  // If the slot's question was replaced (deleted, demo reset, switch of show), stay on the same slot number.
-  useEffect(() => { if (index < 0) { const q = view.questions[lastIndex.current]; setSelected(q.id); setForm(blankForm(q)); setDirty(false); } }, [index, view.workspace]);
+  // If the slot's question was replaced (deleted, demo reset, switch of show), stay on the same slot
+  // number, or the last slot when an extra slot at the end was removed.
+  useEffect(() => { if (index < 0) { const q = view.questions[Math.min(lastIndex.current, view.questions.length - 1)]; setSelected(q.id); setForm(blankForm(q)); setDirty(false); } }, [index, view.workspace]);
+  // A slot just added: open it as soon as it arrives in the live state.
+  const [pending, setPending] = useState(null);
+  useEffect(() => { const q = pending && view.questions.find((x) => x.id === pending); if (q) { setSelected(q.id); setForm(blankForm(q)); setDirty(false); setPending(null); } }, [view.questions, pending]);
   if (index < 0) return null;
 
   const select = (id) => {
@@ -97,8 +102,13 @@ export function QuestionsTab({ view }) {
     setForm(blankForm(r.question)); setDirty(false);
     say(status === "published" ? `Published question ${index + 1}.${onStage ? " The projector still shows the earlier version until you press Update projector." : ""}` : `Saved question ${index + 1} as a draft.`, "ok");
   };
+  const addSlot = async () => {
+    if (dirty && !confirm("You have unsaved changes in this question. Leave without saving?")) return;
+    const r = await run("bank.add");
+    if (r) setPending(r.id);
+  };
   const clear = async () => {
-    if (!confirm(`Delete question ${index + 1}? The slot goes back to "Not configured".`)) return;
+    if (!confirm(index < TOTAL_STOPS ? `Delete question ${index + 1}? The slot goes back to "Not configured".` : `Delete extra question ${index + 1}? It is removed from the bank.`)) return;
     if (await run("bank.clear", { id: selected })) { setDirty(false); setSelected(null); }
   };
   const duplicate = async () => {
@@ -113,8 +123,9 @@ export function QuestionsTab({ view }) {
   const pv = view.preview?.kind === "question" ? view.preview : null;
   return html`<div class="questions">
     <aside class="panel slots-panel">
-      <header class="panel-head"><h2>Question slots</h2><span class="muted">${view.questions.filter((q) => q.status === "published").length} of 30 published</span></header>
+      <header class="panel-head"><h2>Question slots</h2><span class="muted" data-testid="published-count">${view.questions.filter((q) => q.status === "published").length} of ${view.questions.length} published</span></header>
       <${SlotList} view=${view} selected=${selected} onSelect=${select} />
+      <button type="button" class="btn small add-slot" onClick=${addSlot} disabled=${view.questions.length >= MAX_QUESTIONS} data-testid="btn-add-question">Add a question</button>
     </aside>
 
     <section class="panel editor" data-testid="editor">
@@ -123,9 +134,9 @@ export function QuestionsTab({ view }) {
         <div class="row">
           <label class="inline">Move to position <select value=${index} onChange=${(e) => move(Number(e.target.value))} data-testid="move-select">${view.questions.map((_, i) => html`<option value=${i}>${i + 1}</option>`)}</select></label>
           <button type="button" class="btn ghost small" onClick=${() => move(index - 1)} disabled=${index === 0} aria-label="Move up">Up</button>
-          <button type="button" class="btn ghost small" onClick=${() => move(index + 1)} disabled=${index === 29} aria-label="Move down">Down</button>
+          <button type="button" class="btn ghost small" onClick=${() => move(index + 1)} disabled=${index === view.questions.length - 1} aria-label="Move down">Down</button>
           <button type="button" class="btn ghost small" onClick=${duplicate} disabled=${saved.status === "empty"} data-testid="btn-duplicate">Duplicate</button>
-          <button type="button" class="btn ghost small danger" onClick=${clear} disabled=${saved.status === "empty" && !dirty} data-testid="btn-delete">Delete</button>
+          <button type="button" class="btn ghost small danger" onClick=${clear} disabled=${saved.status === "empty" && !dirty && index < TOTAL_STOPS} data-testid="btn-delete">Delete</button>
         </div>
       </header>
 

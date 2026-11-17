@@ -51,7 +51,7 @@ function App() {
   return html`<div class="app ${demo ? "is-demo" : ""}">
     <header class="top">
       <div class="top-brand"><b>Golden Bell</b><span>Host dashboard</span></div>
-      <nav class="tabs" aria-label="Sections">${TABS.map(([k, label]) => html`<button type="button" class=${tab === k ? "on" : ""} onClick=${() => setTab(k)} data-testid=${`tab-${k}`} aria-current=${tab === k ? "page" : null}>${label}${k === "questions" && notReady > 0 ? html`<i>${30 - notReady}/30</i>` : ""}</button>`)}</nav>
+      <nav class="tabs" aria-label="Sections">${TABS.map(([k, label]) => html`<button type="button" class=${tab === k ? "on" : ""} onClick=${() => setTab(k)} data-testid=${`tab-${k}`} aria-current=${tab === k ? "page" : null}>${label}${k === "questions" && notReady > 0 ? html`<i>${view.questions.length - notReady}/${view.questions.length}</i>` : ""}</button>`)}</nav>
       <div class="top-end">
         <div class="seg small ws" role="radiogroup" aria-label="Which set of content is in use">
           <label class=${!demo ? "on" : ""}><input type="radio" checked=${!demo} onChange=${() => switchTo("live")} data-testid="ws-live" />Live show</label>

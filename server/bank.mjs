@@ -1,6 +1,6 @@
 // Shaping stored content, with no knowledge of where it is stored.
 // Used by the file store (Node) and by the Cloudflare store.
-import { TOTAL_STOPS, emptyQuestion, normalizeQuestion, isBlank, normalizeSettings, normalizeRescue, defaultRescue } from "../shared/schema.mjs";
+import { TOTAL_STOPS, MAX_QUESTIONS, emptyQuestion, normalizeQuestion, isBlank, normalizeSettings, normalizeRescue, defaultRescue } from "../shared/schema.mjs";
 import { newSession } from "../shared/engine.mjs";
 
 export const WORKSPACES = ["live", "demo"];
@@ -8,7 +8,7 @@ export const PARTS = ["questions", "rescue", "settings", "session"];
 export const newId = () => [...crypto.getRandomValues(new Uint8Array(5))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 export function padBank(list) {
-  const bank = (Array.isArray(list) ? list : []).slice(0, TOTAL_STOPS).map((q) => ({ ...emptyQuestion(q.id || newId()), ...q }));
+  const bank = (Array.isArray(list) ? list : []).slice(0, MAX_QUESTIONS).map((q) => ({ ...emptyQuestion(q.id || newId()), ...q }));
   while (bank.length < TOTAL_STOPS) bank.push(emptyQuestion(newId()));
   return bank;
 }

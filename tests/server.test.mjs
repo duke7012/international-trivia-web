@@ -56,6 +56,23 @@ test("with a password: the dashboard is closed until the host signs in, and the 
   assert.equal((await fetch(base + "/api/events?role=host&pin=seven%20golden%20bells")).status, 401);
 });
 
+test("the question bank grows past 30 and shrinks back, never below the 30 journey slots", async () => {
+  const { base } = await start({});
+  const act = async (type, payload = {}) => { const r = await post(base, "/api/host/action", { type, payload }); return { status: r.status, body: await r.json() }; };
+  const bankNow = async () => { const r = await fetch(base + "/api/events?role=host"); const reader = r.body.getReader(); let t = ""; while (!t.includes("\n\n")) t += new TextDecoder().decode((await reader.read()).value); reader.cancel(); return JSON.parse(t.split("data: ")[1].split("\n")[0]).questions; };
+  assert.equal((await bankNow()).length, 30);
+  const added = await act("bank.add");
+  assert.equal(added.status, 200);
+  assert.equal(added.body.slot, 31);
+  assert.equal((await bankNow()).length, 31);
+  // deleting an extra slot removes it; deleting a journey slot only empties it
+  assert.equal((await act("bank.clear", { id: added.body.id })).status, 200);
+  assert.equal((await bankNow()).length, 30);
+  const first = (await bankNow())[0].id;
+  await act("bank.clear", { id: first });
+  assert.equal((await bankNow()).length, 30);
+});
+
 test("the projector needs no sign-in and is never sent host-only content", async () => {
   const { base } = await start({ HOST_PASSWORD: "seven golden bells" });
   const res = await fetch(base + "/api/events?role=projector");

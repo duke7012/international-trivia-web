@@ -212,6 +212,21 @@ test("topic choice draws an unused published question of the stop's difficulty, 
   assert.equal(s.shown, null, "the host must still press Show question");
 });
 
+test("questions past slot 30 are an extra pool: a topic pick can draw them, Next in order never reaches them", () => {
+  // slots 1 to 30 are all published Geography; slot 31 is the only Food question
+  const journey = Array.from({ length: TOTAL_STOPS }, () => q({ topic: "Geography", difficulty: "easy" }));
+  const extra = q({ topic: "Food", difficulty: "easy" });
+  const questions = [...journey, extra];
+  const ctx = makeCtx({ questions });
+  let s = roster(ctx, "Ana");
+  assert.deepEqual(topicOptions(s, questions, ctx.settings).find((t) => t.topic === "Food").next, { id: extra.id, slot: 31 });
+  s = run(s, ctx, ["fly", { topic: "Food" }]);
+  assert.equal(s.currentQuestionId, extra.id, "the topic pick draws slot 31");
+  // with every journey slot but the last already played, Next in order still lands inside 1 to 30
+  const nearlyDone = { ...roster(ctx, "Ana"), stop: TOTAL_STOPS - 1, played: journey.slice(0, TOTAL_STOPS - 1).map((x) => ({ questionId: x.id })) };
+  assert.equal(nextFixed(nearlyDone, questions).slot, TOTAL_STOPS);
+});
+
 test("one country per main question", () => {
   const a = q({ country: "Peru" }), b = q({ country: " peru " });
   assert.match(publishErrors(b, [a, b]).join(" "), /already the country for question 1/);
