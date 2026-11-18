@@ -280,7 +280,7 @@ export function ShowTab({ view, goTo }) {
           ${ph === "READY_TO_FLY" && html`<div class="row"><button type="button" class="btn" onClick=${() => confirm("End the journey here and show the finale with everyone still in the game as champions?") && run("finishShow")} data-testid="btn-finish">Show the finale</button></div>`}`}
         ${ph === "FLIGHT_ANIMATING" && html`<div class="row"><button type="button" class="btn" onClick=${() => run("skipFlight")} data-testid="btn-skip">Skip the flight animation</button><span class="muted">Skipping lands on the waiting card. It does not show the question.</span></div>`}
         ${ph === "DESTINATION_ARRIVED" && html`<p class="note">Landed at destination ${s.stop}. The audience sees "Awaiting question". Press <b>Show question</b> when you are ready.</p>`}
-        ${ph === "QUESTION_VISIBLE" && html`<div class="row"><button type="button" class="btn ghost" onClick=${() => run("hideQuestion")} data-testid="btn-hide">Hide question again</button><span class="muted">The timer is stopped. Read the question${timed ? ", play the clip," : ""} then start the timer.</span></div>`}
+        ${ph === "QUESTION_VISIBLE" && html`<div class="row"><button type="button" class="btn ghost" onClick=${() => run("hideQuestion")} data-testid="btn-hide">Hide question again</button><span class="muted">The timer is stopped. ${q?.presentation === "video" ? "Play the video. Stop it, or let it finish, to show the question, then start the timer." : `Read the question${timed ? ", play the clip," : ""} then start the timer.`}</span></div>`}
         ${ph === "TIMER_RUNNING" && html`<div class="clock-row"><${TimerReadout} timer=${s.timer} />
           ${s.timer.running ? html`<button type="button" class="btn" onClick=${() => run("pauseTimer")} data-testid="btn-pause">Pause</button>` : html`<button type="button" class="btn primary" onClick=${() => run("resumeTimer")} data-testid="btn-resume">Resume</button>`}
           <button type="button" class="btn" onClick=${() => run("timeUp")} data-testid="btn-timeup">Call time now</button>
@@ -291,7 +291,7 @@ export function ShowTab({ view, goTo }) {
         ${ph === "ALL_ELIMINATED" && html`<${AllOut} view=${view} />`}
         ${ph === "RESCUE" && html`<${RescuePanel} view=${view} />`}
         ${ph === "FINISHED" && html`<div class="row"><span class="note">The finale is on the projector.</span><button type="button" class="btn ghost" onClick=${() => run("reopenShow")} data-testid="btn-reopen">Go back to the show</button></div>`}
-        ${timed && html`<${MediaControls} mstate=${s.media} label=${q.presentation === "video" ? "Video on the projector" : "Audio on the projector"} onOp=${(op, value) => run("media", { op, value })} />
+        ${timed && html`<${MediaControls} mstate=${s.media} video=${q.presentation === "video"} label=${q.presentation === "video" ? "Video on the projector" : "Audio on the projector"} onOp=${(op, value) => run("media", { op, value })} />
           <p class="field-hint">Playing or finishing the clip never starts the countdown.</p>`}
       </div>
 

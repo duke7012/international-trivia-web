@@ -92,6 +92,8 @@ export function mediaReduce(m, op, now, arg) {
     case "play": return { ...m, status: "playing", pos: m.status === "ended" ? 0 : m.pos, at: now, n };
     case "pause": return { ...m, status: "paused", pos: mediaPosition(m, now), at: now, n };
     case "replay": return { ...m, status: "playing", pos: 0, at: now, n };
+    // The host is done with the clip: on a video question this brings the question up.
+    case "stop": return { ...m, status: "ended", pos: mediaPosition(m, now), at: now, n };
     case "mute": return { ...m, muted: !!arg, n };
     case "ended": return m.status === "playing" ? { ...m, status: "ended", pos: mediaPosition(m, now), at: now, n } : m;
     default: return fail("Unknown media control.");

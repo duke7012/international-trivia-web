@@ -83,13 +83,16 @@ export function MediaPicker({ kind, media, onChange, allowUrl = true }) {
 }
 
 // Host controls for a clip. They only ever send play, pause, replay and mute.
-export function MediaControls({ mstate, onOp, label }) {
+// video: the question stays hidden while the video plays; stopping it (or its end) shows the question.
+export function MediaControls({ mstate, onOp, label, video = false }) {
   const st = mstate || { status: "idle", muted: false };
+  const done = st.status === "ended";
   return html`<div class="media-controls" data-testid="media-controls" data-status=${st.status}>
-    <span class="mc-label">${label} <i class="mc-state">${{ idle: "ready", playing: "playing", paused: "paused", ended: "finished" }[st.status]}</i></span>
+    <span class="mc-label">${label} <i class="mc-state">${{ idle: "ready", playing: "playing", paused: "paused", ended: video ? "question showing" : "finished" }[st.status]}</i></span>
     ${st.status === "playing"
       ? html`<button type="button" class="btn small" onClick=${() => onOp("pause")} data-testid="media-pause">Pause</button>`
-      : html`<button type="button" class="btn small primary" onClick=${() => onOp("play")} data-testid="media-play">${st.status === "paused" ? "Resume" : "Play"}</button>`}
+      : html`<button type="button" class="btn small primary" onClick=${() => onOp("play")} data-testid="media-play">${st.status === "paused" ? "Resume" : done && video ? "Watch again" : "Play"}</button>`}
+    ${video && !done && html`<button type="button" class="btn small primary" onClick=${() => onOp("stop")} data-testid="media-stop">Stop and show the question</button>`}
     <button type="button" class="btn small" onClick=${() => onOp("replay")} data-testid="media-replay">Replay from start</button>
     <button type="button" class="btn small ${st.muted ? "on" : ""}" onClick=${() => onOp("mute", !st.muted)} data-testid="media-mute" aria-pressed=${String(!!st.muted)}>${st.muted ? "Unmute" : "Mute"}</button>
   </div>`;
