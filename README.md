@@ -244,8 +244,8 @@ Everyone who is out plays **one game as a team**, and the team's score sets how 
 | **Physical game** | Your own game (by default *Control tower*: stack paper cups in turns for 90 seconds) with its rules and a clock on screen. | what you enter, e.g. tower levels |
 
 Each success adds a set percentage (10% by default), and reaching the game's threshold brings
-everyone back. Semantle uses closeness steps instead (900+ is 20%, 990+ is 50%, finding the word
-is everyone). The share becomes a number of passengers, at least one once anything is won.
+everyone back. Semantle counts its closeness score the same way: every 100 points adds 5% by
+default (so 900+ is 45%), and finding the word is everyone. The share becomes a number of passengers, at least one once anything is won.
 
 1. Press **START RESCUE GAME**, pick a game, and check its rules and score ladder on the projector.
 2. Press **Start**. For the beat and doodle games, mark each round **✓** or **✗** and press

@@ -35,7 +35,7 @@ export function RescueTab({ view }) {
       </section>
       <section class="panel">
         <header class="panel-head"><h2>Semantle</h2><span class="muted">${plural(semantlePuzzles(r.semantle.puzzles).length, "puzzle")}</span></header>
-        <div class="grid3">${n("semantle", "minutes", "Minutes", { min: 1, max: 30 })}${n("semantle", "lowAt", "Closeness for the first step", { min: 1, max: 999 })}${n("semantle", "lowPct", "% back at that step", { min: 1, max: 99 })}<span></span>${n("semantle", "highAt", "Closeness for the second step", { min: 1, max: 999 })}${n("semantle", "highPct", "% back at that step", { min: 1, max: 99 })}</div>
+        <div class="grid3">${n("semantle", "minutes", "Minutes", { min: 1, max: 30 })}${n("semantle", "every", "Step size (closeness points)", { min: 10, max: 500 })}${n("semantle", "rate", "% back per step", { min: 1, max: 100 })}${n("semantle", "allAt", "Everyone back at (1000 = word found)", { min: 1, max: 1000 })}</div>
         <${Field} label="Archive puzzle numbers" hint="From semantle.com/archive, played in this order"><input type="text" value=${r.semantle.puzzles} onInput=${(e) => setG("semantle", { puzzles: e.target.value })} data-testid="rescue-semantle-puzzles" /><//>
         <${Ladder} kind="semantle" />
       </section>

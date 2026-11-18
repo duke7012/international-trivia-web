@@ -14,10 +14,9 @@
  "semantle": {
   "minutes": 5,
   "puzzles": "1700, 1650, 1600, 1550, 1500, 1450, 1400, 1350, 1300, 1250",
-  "lowAt": 900,
-  "lowPct": 20,
-  "highAt": 990,
-  "highPct": 50
+  "every": 100,
+  "rate": 5,
+  "allAt": 1000
  },
  "tower": {
   "title": "Control tower",

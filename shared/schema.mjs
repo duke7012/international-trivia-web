@@ -238,7 +238,8 @@ export function defaultRescue() {
     emergencyRule: "returnLastOut",
     beat: { rate: 10, allAt: 4 },
     doodle: { rate: 10, allAt: 7, rounds: 10, drawSeconds: 8, guessSeconds: 10 },
-    semantle: { minutes: 5, puzzles: DEFAULT_SEMANTLE_PUZZLES, lowAt: 900, lowPct: 20, highAt: 990, highPct: 50 },
+    // every `every` points of closeness adds `rate`%; closeness 1000 is finding the word
+    semantle: { minutes: 5, puzzles: DEFAULT_SEMANTLE_PUZZLES, every: 100, rate: 5, allAt: 1000 },
     tower: { title: "Control tower", rules: DEFAULT_TOWER_RULES, seconds: 90, rate: 10, allAt: 7 },
   };
 }
@@ -248,7 +249,6 @@ export function normalizeRescue(r = {}) {
   const int = (v, lo, hi, dflt) => Math.round(num(v, lo, hi, dflt));
   const rated = (x = {}, dd) => ({ rate: int(x.rate, 1, 100, dd.rate), allAt: int(x.allAt, 1, 99, dd.allAt) });
   const b = r.beat || {}, o = r.doodle || {}, m = r.semantle || {}, t = r.tower || {};
-  const lowAt = int(m.lowAt, 1, 999, d.semantle.lowAt);
   return {
     emergencyRule: EMERGENCY_RULES[r.emergencyRule] ? r.emergencyRule : d.emergencyRule,
     beat: { ...rated(b, d.beat), allAt: int(b.allAt, 1, 5, d.beat.allAt) },
@@ -256,8 +256,7 @@ export function normalizeRescue(r = {}) {
     semantle: {
       minutes: num(m.minutes, 1, 30, d.semantle.minutes),
       puzzles: semantlePuzzles(m.puzzles ?? d.semantle.puzzles).join(", ") || d.semantle.puzzles,
-      lowAt, lowPct: int(m.lowPct, 1, 99, d.semantle.lowPct),
-      highAt: int(m.highAt, lowAt, 999, Math.max(lowAt, d.semantle.highAt)), highPct: int(m.highPct, 1, 99, d.semantle.highPct),
+      every: int(m.every, 10, 500, d.semantle.every), rate: int(m.rate, 1, 100, d.semantle.rate), allAt: int(m.allAt, 1, 1000, d.semantle.allAt),
     },
     tower: {
       ...rated(t, d.tower),
@@ -276,11 +275,8 @@ export const rescueScore = (game) => (!game ? 0 : ["beat", "doodle"].includes(ga
 
 // Share of the eliminated contestants who come back, in percent.
 export function rescuePct(kind, score, cfg) {
-  if (kind === "semantle") {
-    const m = cfg.semantle;
-    return score >= 1000 ? 100 : score >= m.highAt ? m.highPct : score >= m.lowAt ? m.lowPct : 0;
-  }
   const g = cfg[kind];
+  if (kind === "semantle") return score >= g.allAt ? 100 : Math.min(100, Math.floor(score / g.every) * g.rate);
   return score >= g.allAt ? 100 : Math.min(100, score * g.rate);
 }
 // How many of `out` eliminated contestants that is: rounded, at least one once anything is won.
@@ -290,8 +286,10 @@ const UNIT = { beat: ["level", "levels"], doodle: ["country", "countries"], towe
 // The score ladder shown before a game starts.
 export function rescueLadder(kind, cfg) {
   if (kind === "semantle") {
-    const m = cfg.semantle;
-    return [`Closeness ${m.lowAt}+ → ${m.lowPct}% back`, `Closeness ${m.highAt}+ → ${m.highPct}% back`, "Find the word → everyone back"];
+    const m = cfg.semantle, every = Number(m.every), rate = Number(m.rate), allAt = Number(m.allAt), lines = [];
+    for (let n = 1; n * every < allAt && n * rate < 100; n++) lines.push(`Closeness ${n * every}+ → ${n * rate}% back`);
+    lines.push(allAt >= 1000 ? "Find the word → everyone back" : `Closeness ${allAt}+ → everyone back`);
+    return lines;
   }
   const g = cfg[kind], [one, many] = UNIT[kind], lines = [];
   for (let n = 1; n < g.allAt; n++) if (n * g.rate < 100) lines.push(`${n} ${n === 1 ? one : many} → ${n * g.rate}% back`);
