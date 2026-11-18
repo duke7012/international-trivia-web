@@ -241,7 +241,7 @@ Everyone who is out plays **one game as a team**, and the team's score sets how 
 | **Say it on the beat** | Eight flags light up one per beat; the team says each country on the beat. Five levels, each faster; the last one has no names. | levels passed |
 | **Guess the doodle** | A country's outline draws itself, then a 10-second countdown. No guess in time and it skips. | countries guessed |
 | **Semantle** | An archived [semantle.com](https://semantle.com/archive) puzzle fills the projector for 5 minutes; contestants come up and type. | best closeness out of 1000 |
-| **Physical game** | Your own game (by default *Control tower*: stack paper cups in turns for 90 seconds) with its rules and a clock on screen. | what you enter, e.g. tower levels |
+| **Physical game** | Your own game (by default the *Tower relay*: dice, a cup carried on the head, and building the tower the host shows) with its rules on screen. Everyone out plays in groups of 6, each with its own 5-minute clock. | towers finished, all groups |
 
 Each success adds a set percentage (10% by default), and reaching the game's threshold brings
 everyone back. Semantle counts its closeness score the same way: every 100 points adds 5% by

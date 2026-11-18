@@ -120,14 +120,14 @@ const afterElimination = (s) => (active(s).length === 0 && s.contestants.length 
 const snapshot = (q, slot) => ({ question: structuredClone(q), slot, sourceUpdatedAt: q.updatedAt });
 // ----- rescue helpers -----
 const game = (s, what) => { need(s, ["RESCUE"], what); return s.rescue?.game || fail("Choose a rescue game first."); };
-export const rounds = (g) => (g.kind === "beat" ? g.items.levels.length : g.kind === "doodle" ? g.items.length : 1);
+export const rounds = (g) => (g.kind === "beat" ? g.items.levels.length : g.kind === "doodle" ? g.items.length : g.kind === "tower" ? g.items.groups || 1 : 1);
 const shuffle = (list, random) => { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 // Unused first, in bank order; once everything has been used, the longest-unused first.
 const freshest = (list, key, used) => {
   const last = (x) => used.lastIndexOf(key(x));
   return [...list].sort((a, b) => last(a) - last(b));
 };
-function drawRescue(kind, used, ctx) {
+function drawRescue(kind, used, ctx, out) {
   if (kind === "beat") {
     const set = freshest(BEAT_SETS, (x) => x.id, used.beat || [])[0];
     const final = shuffle(set.levels.flat(), ctx.random).slice(0, 8).map((f) => ({ ...f, hidden: true }));
@@ -146,7 +146,7 @@ function drawRescue(kind, used, ctx) {
     if (!list.length) fail("Add Semantle puzzle numbers in the Rescue tab first.");
     return { puzzle: freshest(list, (n) => n, used.semantle || [])[0] };
   }
-  return {};
+  return { groups: Math.max(1, Math.ceil(out / ctx.rescue.tower.groupSize)) };
 }
 const backInTheAir = (s, returnedIds, now, extra = {}) => ({
   ...s,
@@ -312,7 +312,7 @@ const handlers = {
     need(s, ["RESCUE"], "Choosing the rescue game");
     if (!RESCUE_KINDS.includes(kind)) fail("Unknown rescue game.");
     if (s.rescue.game && s.rescue.game.status !== "intro") fail("A game is already under way. Leave the rescue to start over.");
-    const items = drawRescue(kind, s.rescueUsed || {}, ctx);
+    const items = drawRescue(kind, s.rescueUsed || {}, ctx, eliminated(s).length);
     return { ...s, rescue: { ...s.rescue, game: { kind, items, round: 0, status: "intro", startedAt: null, deadline: null, results: [], score: null } } };
   },
   rescueGo(s, _, ctx) {
@@ -325,10 +325,14 @@ const handlers = {
     } else if (g.kind === "doodle") {
       if (!["intro", "ready"].includes(g.status)) fail("This country is already on screen.");
       next = { ...g, status: "playing", startedAt: now, deadline: now + Math.round((cfg.doodle.drawSeconds + cfg.doodle.guessSeconds) * 1000) };
+    } else if (g.kind === "tower") {
+      // each group gets its own clock: the first from the intro, the next once time is up
+      const more = g.status === "timeUp" && g.round + 1 < rounds(g);
+      if (g.status !== "intro" && !more) fail(g.status === "playing" ? "This group is already playing." : "Every group has had its turn.");
+      next = { ...g, round: more ? g.round + 1 : g.round, status: "playing", startedAt: now, deadline: now + Math.round(cfg.tower.seconds * 1000) };
     } else {
       if (g.status !== "intro") fail("The timer has already run.");
-      const ms = g.kind === "semantle" ? cfg.semantle.minutes * 60000 : cfg.tower.seconds * 1000;
-      next = { ...g, status: "playing", startedAt: now, deadline: now + Math.round(ms) };
+      next = { ...g, status: "playing", startedAt: now, deadline: now + Math.round(cfg.semantle.minutes * 60000) };
     }
     // What a game uses is spent once it starts, so the next rescue round gets fresh ones.
     const used = s.rescueUsed || { beat: [], doodle: [], semantle: [] };
@@ -357,7 +361,7 @@ const handlers = {
     if (g.status === "intro") fail("Start the game first.");
     const n = Math.round(Number(score));
     const max = g.kind === "semantle" ? 1000 : 99;
-    if (!Number.isFinite(n) || n < 0 || n > max) fail(g.kind === "semantle" ? "Enter the closeness from 0 to 1000 (1000 if they found the word)." : "Enter how many levels the tower reached.");
+    if (!Number.isFinite(n) || n < 0 || n > max) fail(g.kind === "semantle" ? "Enter the closeness from 0 to 1000 (1000 if they found the word)." : "Enter how many towers were finished, across all groups.");
     return { ...s, rescue: { ...s.rescue, game: { ...g, score: n, status: "done", deadline: null } } };
   },
   // The clock: a doodle nobody guessed is a miss; a timed game stops and waits for its score.

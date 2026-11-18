@@ -19,10 +19,11 @@
   "allAt": 1000
  },
  "tower": {
-  "title": "Control tower",
-  "rules": "Everyone plays as one team.\nTake turns: one person places one paper cup at a time.\nBuild the tallest tower you can in the time.\nEach level of the tower that is still standing at the end counts.",
-  "seconds": 90,
-  "rate": 10,
-  "allAt": 7
+  "title": "Tower relay",
+  "rules": "Split into two lines. Each line runs three checkpoints.\nCheckpoint 1: roll the dice, take that many blocks, and throw them into a cup across the room.\nCheckpoint 2: carry the cup of blocks on your head to the builders. Drop it, and go back to the start.\nCheckpoint 3: build the tower the host shows, using only the blocks delivered.\nEach group takes its own turn on the clock. Every finished tower counts.",
+  "seconds": 300,
+  "groupSize": 6,
+  "rate": 20,
+  "allAt": 5
  }
 }

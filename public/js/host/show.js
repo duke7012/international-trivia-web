@@ -183,7 +183,7 @@ function RescueClock({ deadline }) {
   return html`<b class="readout" data-testid="rescue-host-clock">${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}</b>`;
 }
 
-function RescueGame({ g }) {
+function RescueGame({ g, cfg }) {
   const [score, setScore] = useState("");
   const go = (label, testid = "btn-rescue-go") => html`<button type="button" class="btn primary big" onClick=${() => run("rescueGo")} data-testid=${testid}>${label}</button>`;
   const mark = html`<div class="row"><button type="button" class="btn primary" onClick=${() => run("rescueMark", { ok: true })} data-testid="btn-rescue-ok">✓ They got it</button>
@@ -207,12 +207,14 @@ function RescueGame({ g }) {
       ${g.status === "marked" && next}
     </div>`;
   }
-  const semantle = g.kind === "semantle";
+  const semantle = g.kind === "semantle", groups = g.items.groups || 1;
   return html`<div class="rescue-game">
     ${semantle && html`<p>Semantle puzzle <a href=${semantleUrl(g.items.puzzle)} target="_blank" rel="noopener">#${g.items.puzzle}</a> is on the projector. Contestants type there.</p>`}
+    ${!semantle && html`<p>${groups > 1 ? `Group ${g.round + 1} of ${groups} (up to ${cfg.tower.groupSize} people each, ${Math.round(cfg.tower.seconds / 60 * 10) / 10} min each).` : "One group."} Show the builders each tower design yourself.</p>`}
     ${g.status === "playing" && html`<div class="clock-row"><${RescueClock} deadline=${g.deadline} /><button type="button" class="btn" onClick=${() => run("rescueTimeout")} data-testid="btn-rescue-stop">Stop the clock</button></div>`}
+    ${!semantle && g.status === "timeUp" && g.round + 1 < groups && html`<div class="row"><button type="button" class="btn primary big" onClick=${() => run("rescueGo")} data-testid="btn-rescue-next-group">Start group ${g.round + 2} of ${groups}</button></div>`}
     <div class="row">
-      <label class="field-label">${semantle ? "Best closeness out of 1000 (1000 = found the word)" : "Tower levels still standing"}
+      <label class="field-label">${semantle ? "Best closeness out of 1000 (1000 = found the word)" : "Towers finished, all groups so far"}
         <input type="number" min="0" max=${semantle ? 1000 : 99} class="narrow" value=${score} onInput=${(e) => setScore(e.target.value)} data-testid="rescue-score-input" /></label>
       <button type="button" class="btn primary" disabled=${score === ""} onClick=${() => run("rescueScore", { score: Number(score) })} data-testid="btn-rescue-score">Save the score</button>
     </div>
@@ -232,8 +234,9 @@ function RescuePanel({ view }) {
       ${g && html`<ul class="ladder-host">${rescueLadder(g.kind, cfg).map((l) => html`<li>${l}</li>`)}</ul>
         ${g.kind === "doodle" && html`<p class="muted">Countries: ${g.items.map((c) => c.name).join(", ")}</p>`}
         ${g.kind === "semantle" && html`<p class="muted">Puzzle #${g.items.puzzle}. The projector loads it when you start.</p>`}
-        <button type="button" class="btn primary big" onClick=${() => run("rescueGo")} data-testid="btn-rescue-go">Start ${rescueInfo(g.kind, cfg).title}</button>`}`}
-    ${g && !intro && g.status !== "done" && html`<${RescueGame} g=${g} key=${g.kind} />`}
+        ${g.kind === "tower" && html`<p class="muted">${plural(out.length, "person", "people")} out: ${plural(g.items.groups, "group")} of up to ${cfg.tower.groupSize}, one after another.</p>`}
+        <button type="button" class="btn primary big" onClick=${() => run("rescueGo")} data-testid="btn-rescue-go">Start ${rescueInfo(g.kind, cfg).title}${g.kind === "tower" && g.items.groups > 1 ? " (group 1)" : ""}</button>`}`}
+    ${g && !intro && g.status !== "done" && html`<${RescueGame} g=${g} cfg=${cfg} key=${g.kind} />`}
     ${g && !intro && html`<p class="rescue-tally" data-testid="rescue-tally">Score <b>${rescueScore(g)}</b> → <b>${pct}%</b> → <b>${max} of ${out.length}</b> may return</p>`}
     ${g?.status === "done" && (max > 0 ? html`
       <div class="row"><button type="button" class="btn ghost small" onClick=${() => setIds(out.slice(0, max).map((c) => c.id))} data-testid="return-all">${max >= out.length ? "Select everyone" : `Select the first ${max}`}</button><button type="button" class="btn ghost small" onClick=${() => setIds([])}>Clear</button><span class="muted">${ids.length} of ${max} chosen</span></div>

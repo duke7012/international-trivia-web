@@ -43,7 +43,8 @@ export function RescueTab({ view }) {
         <header class="panel-head"><h2>Physical game</h2><span class="muted">${plural(lines.length, "rule")} on the projector</span></header>
         <${Field} label="Game name"><input type="text" maxlength="80" value=${r.tower.title} onInput=${(e) => setG("tower", { title: e.target.value })} data-testid="rescue-title" /><//>
         <${Field} label="Rules" hint="One rule per line (up to 12)"><textarea rows="5" value=${r.tower.rules} onInput=${(e) => setG("tower", { rules: e.target.value })} data-testid="rescue-rules" /><//>
-        <div class="grid3">${n("tower", "seconds", "Time (s)", { min: 10, max: 600 })}${rated("tower", "level")}</div><${Ladder} kind="tower" />
+        <div class="grid3">${n("tower", "seconds", "Time per group (s)", { min: 10, max: 1800 })}${n("tower", "groupSize", "People per group", { min: 1, max: 50 })}<span></span>${rated("tower", "tower")}</div>
+        <p class="field-hint">Everyone out is split into groups of this size, and each group gets its own turn on the clock. Score: towers finished across all groups.</p><${Ladder} kind="tower" />
       </section>
     </div>
 

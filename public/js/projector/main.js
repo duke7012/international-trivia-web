@@ -20,6 +20,8 @@ window.__world = world;
 const reportSound = () => !MONITOR && fetch("/api/projector/status", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cid, sound: sfx.armed }) }).catch(() => {});
 const mediaEnded = (n) => !MONITOR && fetch("/api/projector/media-ended", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ n }) }).catch(() => {});
 
+// Long rules get the smaller type: too many lines, or too many words in all.
+const dense = (lines, most, chars) => lines.length > most || lines.join("").length > chars;
 const list = (names, max = 8) => (names.length > max ? `${names.slice(0, max).join(", ")} and ${names.length - max} more` : names.join(", "));
 
 function sounds(prev, v) {
@@ -234,13 +236,13 @@ function Rescue({ v }) {
   if (r.status === "intro") {
     return html`<section class="rescue" data-testid="rescue-game" data-kind=${r.kind}>${head}
       <h1 data-testid="rescue-title">${r.title}</h1>
-      <ol class="game-rules ${r.howTo.length > 6 ? "many" : ""}" data-testid="rescue-rules">${r.howTo.map((line, i) => html`<li style=${`animation-delay:${0.25 + i * 0.12}s`}>${line}</li>`)}</ol>
+      <ol class="game-rules ${dense(r.howTo, 6, 260) ? "many" : ""}" data-testid="rescue-rules">${r.howTo.map((line, i) => html`<li style=${`animation-delay:${0.25 + i * 0.12}s`}>${line}</li>`)}</ol>
       <ul class="ladder" data-testid="rescue-ladder">${r.ladder.map((l) => html`<li>${l}</li>`)}</ul>
     </section>`;
   }
   if (r.status === "done") {
     return html`<section class="rescue done" data-testid="rescue-game" data-kind=${r.kind}>${head}
-      <p class="rg-lead">${r.title}: ${r.kind === "semantle" ? (r.score >= 1000 ? "the word was found!" : `closest guess ${r.score} / 1000`) : r.kind === "tower" ? `a tower ${r.score} ${r.score === 1 ? "level" : "levels"} high` : `${r.score} of ${r.rounds} ${r.kind === "beat" ? "levels" : "countries"}`}</p>
+      <p class="rg-lead">${r.title}: ${r.kind === "semantle" ? (r.score >= 1000 ? "the word was found!" : `closest guess ${r.score} / 1000`) : r.kind === "tower" ? `${r.score} ${r.score === 1 ? "tower" : "towers"} finished` : `${r.score} of ${r.rounds} ${r.kind === "beat" ? "levels" : "countries"}`}</p>
       <h1 data-testid="rescue-result">${r.count === 0 ? "Nobody returns this time" : r.count >= r.out ? "Everyone is back on board!" : `${r.count} of ${r.out} passengers return`}</h1>
       <p class="rg-pct">${r.pct}%</p>
     </section>`;
@@ -250,8 +252,10 @@ function Rescue({ v }) {
     ${r.kind === "beat" && html`<${Beat} r=${r} />`}
     ${r.kind === "doodle" && html`<${Doodle} r=${r} key=${r.round + ":" + r.startedAt} />`}
     ${r.kind === "semantle" && html`<${Semantle} r=${r} />`}
-    ${r.kind === "tower" && html`<div class="tower"><ol class="game-rules ${r.howTo.length > 5 ? "many" : ""}">${r.howTo.map((line) => html`<li>${line}</li>`)}</ol>
-      ${r.status === "playing" ? html`<${Countdown} deadline=${r.deadline} big />` : html`<p class="rg-clock big low">Time's up</p>`}</div>`}
+    ${r.kind === "tower" && html`<div class="tower"><ol class="game-rules ${dense(r.howTo, 5, 180) ? "many" : ""}">${r.howTo.map((line) => html`<li>${line}</li>`)}</ol>
+      <div class="tower-clock">${r.rounds > 1 && html`<p class="tower-group" data-testid="tower-group">Group ${r.round + 1} of ${r.rounds}</p>`}
+      ${r.status === "playing" ? html`<${Countdown} deadline=${r.deadline} big />` : html`<p class="rg-clock big low">Time's up</p>`}
+      ${r.status === "timeUp" && r.round + 1 < r.rounds && html`<p class="tower-next">Group ${r.round + 2}, get ready</p>`}</div></div>`}
     <${ScoreStrip} r=${r} />
   </section>`;
 }
