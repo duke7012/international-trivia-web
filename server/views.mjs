@@ -2,8 +2,37 @@
 // The host sees everything. The projector is sent a question only once the host has shown it,
 // and an answer only once the host has revealed it, so a refresh (or a curious look in the
 // browser's developer tools) can never expose anything early.
-import { TOTAL_STOPS, answerText, ruleLines, youtubeId, publishErrors, draftWarnings } from "../shared/schema.mjs";
-import { QUESTION_PHASES, ANSWER_PHASES, active, eliminated, nextFixed, topicOptions } from "../shared/engine.mjs";
+import { TOTAL_STOPS, answerText, youtubeId, publishErrors, draftWarnings, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount } from "../shared/schema.mjs";
+import { QUESTION_PHASES, ANSWER_PHASES, active, eliminated, nextFixed, topicOptions, rounds } from "../shared/engine.mjs";
+import { BEAT_BPM, semantleUrl } from "../shared/rescue-bank.mjs";
+import OUTLINES from "./rescue-outlines.mjs";
+
+const flag = (iso2) => `/flags/${iso2}.png`;
+// The rescue game as the room sees it: only what is on screen right now, and a doodle's name
+// only once that round is over.
+function stageRescue(r, cfg, out) {
+  const g = r.game;
+  const v = { attempt: r.attempt, kind: g?.kind || null, out };
+  if (!g) return v;
+  const score = rescueScore(g), pct = rescuePct(g.kind, score, cfg);
+  Object.assign(v, rescueInfo(g.kind, cfg), {
+    ladder: rescueLadder(g.kind, cfg), status: g.status, round: g.round, rounds: rounds(g),
+    startedAt: g.startedAt, deadline: g.deadline, results: g.results, score, pct, count: rescueCount(pct, out),
+  });
+  if (g.status === "intro") return v;
+  if (g.kind === "beat") {
+    v.bpm = BEAT_BPM[g.round] || BEAT_BPM.at(-1);
+    v.flags = g.items.levels[g.round].map((f) => ({ src: flag(f.iso2), name: f.hidden ? null : f.name }));
+  } else if (g.kind === "doodle") {
+    const c = g.items[g.round];
+    v.outline = OUTLINES[c.iso3] || null;
+    v.drawMs = Math.round(cfg.doodle.drawSeconds * 1000);
+    if (g.status !== "playing") v.answer = { name: c.name, flag: flag(c.iso2), ok: !!g.results[g.round] };
+  } else if (g.kind === "semantle") {
+    v.puzzle = g.items.puzzle; v.url = semantleUrl(g.items.puzzle);
+  }
+  return v;
+}
 
 const stageMedia = (m) => m && {
   src: m.src, fit: m.fit, zoom: m.zoom, focusX: m.focusX, focusY: m.focusY,
@@ -48,7 +77,7 @@ export function projectorView(ws, preview, now, sounds = {}) {
     };
   }
   if (s.lastRescue && s.phase === "READY_TO_FLY") v.lastRescue = { count: s.lastRescue.returnedIds.length, names: names(s.lastRescue.returnedIds), via: s.lastRescue.via };
-  if (s.phase === "RESCUE" && s.rescue) v.rescue = { attempt: s.rescue.attempt, title: ws.rescue.title, rules: ruleLines(ws.rescue.rules) };
+  if (s.phase === "RESCUE" && s.rescue) v.rescue = stageRescue(s.rescue, ws.rescue, eliminated(s).length);
   if (s.phase === "FINISHED") v.finale = { winners: names(active(s).map((c) => c.id)), count: active(s).length, stop: s.stop };
   if (preview) {
     v.preview = preview.kind === "flight"

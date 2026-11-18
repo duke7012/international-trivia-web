@@ -212,7 +212,7 @@ live show and the demo rehearsal, and play on the projector.
 | Correct answer appears | Plays as the answer appears | `correct_answer` |
 | After the correct answer | Plays straight after the one above | `congratulations` |
 | Checking eliminations | Loops while you mark who is out | `contestant_elimination` |
-| Rescue game | Loops while the rescue game's rules are on the projector | `rescue` or `mayday` |
+| Rescue game | Loops while the rescue game is on the projector (it pauses during the beat game's own beat) | `rescue` or `mayday` |
 | Finale | Loops while the finale is on the projector | `finale` |
 
 The two lead-ins change the timing on purpose: the host still presses Start timer and Reveal
@@ -226,15 +226,32 @@ There is no scheduled rescue. A rescue only becomes possible when the last conte
 eliminated. Then the show stops in `ALL_ELIMINATED`: the projector shows the emergency screen and
 the dashboard shows **START RESCUE GAME**. Nothing else happens until you choose.
 
-The rescue is a physical game played in the room by everyone who is out. The app does not run or
-score it:
+Everyone who is out plays **one game as a team**, and the team's score sets how many come back:
 
-1. Press **START RESCUE GAME**. The projector shows the game's name and its rules, numbered.
-2. Play the game in the room. Nothing on screen moves on by itself.
-3. Tick who won their way back, and press **Return to the flight**.
+| Game | How it plays | Score |
+|---|---|---|
+| **Say it on the beat** | Eight flags light up one per beat; the team says each country on the beat. Five levels, each faster; the last one has no names. | levels passed |
+| **Guess the doodle** | A country's outline draws itself, then a 10-second countdown. No guess in time and it skips. | countries guessed |
+| **Semantle** | An archived [semantle.com](https://semantle.com/archive) puzzle fills the projector for 5 minutes; contestants come up and type. | best closeness out of 1000 |
+| **Physical game** | Your own game (by default *Control tower*: stack paper cups in turns for 90 seconds) with its rules and a clock on screen. | what you enter, e.g. tower levels |
 
-Write the game's name and rules in the **Rescue** tab (one rule per line), separate from the 30
-main questions. **Leave rescue** goes back to the emergency screen; a second game shows as round 2.
+Each success adds a set percentage (10% by default), and reaching the game's threshold brings
+everyone back. Semantle uses closeness steps instead (900+ is 20%, 990+ is 50%, finding the word
+is everyone). The share becomes a number of passengers, at least one once anything is won.
+
+1. Press **START RESCUE GAME**, pick a game, and check its rules and score ladder on the projector.
+2. Press **Start**. For the beat and doodle games, mark each round **✓** or **✗** and press
+   **Next**. For Semantle and the physical game, enter the score when the clock stops.
+3. Tick who comes back (up to the number earned), and press **Return to the flight**.
+
+Set the rates, thresholds, timings, Semantle puzzle numbers and the physical game's rules in the
+**Rescue** tab. Each rescue round uses flags, countries and puzzles that have not been played yet.
+**Leave rescue** goes back to the emergency screen; a second game shows as round 2. Semantle needs
+internet at the venue; everything else is stored in the app.
+
+The flags come from [REST Countries](https://restcountries.com/flags) and the country outlines from
+[geoBoundaries](https://www.geoboundaries.org) (CC-BY 4.0). `node scripts/fetch-rescue-assets.mjs`
+downloads them again after the bank in `shared/rescue-bank.mjs` changes.
 
 An **emergency return** (you pick who comes back) and the **emergency rule** you set in advance are
 always available, so the show can never be stuck with nobody in the game. Only eliminated
