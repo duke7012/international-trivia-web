@@ -415,7 +415,7 @@ export function createWorld(canvas, { monitor = false } = {}) {
   let state = { mode: "lobby", stop: 0, flight: null, next: 1 };
   let fCur = 0, firstFrame = true, emerg = 0, fin = 0, lastT = performance.now(), time = 0, spin = 0.3;
   const P = new THREE.Vector3(), Pa = new THREE.Vector3(), Pb = new THREE.Vector3(), fwd = new THREE.Vector3(), side = new THREE.Vector3();
-  const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3();
+  const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3(), aim = new THREE.Vector3();
   const zen = new THREE.Color(), mid = new THREE.Color(), hor = new THREE.Color();
 
   function skyAt(p) {
@@ -458,7 +458,7 @@ export function createWorld(canvas, { monitor = false } = {}) {
 
     // emergency and finale blend in and out
     emerg += ((state.mode === "emergency" ? 1 : 0) - emerg) * (1 - Math.exp(-dt * (state.mode === "emergency" ? 2.5 : 5)));
-    fin += ((state.mode === "finale" ? 1 : 0) - fin) * (1 - Math.exp(-dt * 1.5));
+    fin += ((state.mode === "finale" || state.bell ? 1 : 0) - fin) * (1 - Math.exp(-dt * 1.5));
     const wantSpin = state.mode === "emergency" ? 0 : flying ? 1 : 0.22;
     spin += (wantSpin - spin) * (1 - Math.exp(-dt * 2));
     prop.rotation.z += dt * spin * 46;
@@ -496,6 +496,13 @@ export function createWorld(canvas, { monitor = false } = {}) {
     } else if (state.mode === "emergency") {
       wantPos.copy(here.c).addScaledVector(here.t, 8.5).addScaledVector(here.s, 5.5 + sway * 0.6); wantPos.y += 2.4 + Math.sin(time * 31) * 0.015 * emerg;
       wantLook.copy(here.c).addScaledVector(here.s, -1.2); wantLook.y += 1.5;
+    } else if (state.mode === "rules") {
+      // a high three-quarter view, aimed left of the island so it sits in the right half, clear of the rule card
+      const k = state.bell ? 0.88 : 1; // closer in on the Golden Bell
+      wantPos.copy(here.c).addScaledVector(here.t, (17 + sway * 1.5) * k).addScaledVector(here.s, (19 - sway) * k); wantPos.y += state.bell ? 11 : 10;
+      wantLook.copy(here.c); wantLook.y += 2.3 + (state.bell ? 4.5 : 0);
+      aim.subVectors(wantLook, wantPos).cross(UP).normalize();
+      wantLook.addScaledVector(aim, -8.5);
     } else if (state.mode === "finale") {
       const a = time * 0.16;
       wantPos.copy(here.c).addScaledVector(here.t, Math.cos(a) * 20).addScaledVector(here.s, Math.sin(a) * 20); wantPos.y += 5;
@@ -575,7 +582,8 @@ export function createWorld(canvas, { monitor = false } = {}) {
   renderer.setAnimationLoop((t) => { if (monitor && t - lastDraw < 42) return; lastDraw = t; frame(t); });
 
   return {
-    // mode: lobby | waiting | emergency | finale.   flight: { from, to, startedAt, durationMs } | null
+    // mode: lobby | waiting | emergency | finale | rules.   flight: { from, to, startedAt, durationMs } | null
+    // bell: show the Golden Bell (the finale, or the last rule)
     set(next) { state = { ...state, ...next }; },
     resize,
     progress: () => fCur,

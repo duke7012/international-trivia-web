@@ -243,3 +243,9 @@ legend { font-size: 13px; font-weight: 700; color: var(--muted); padding: 0 6px;
 @media (max-width: 1180px) { .show { grid-template-columns: 1fr; } .editor-grid { grid-template-columns: 1fr; } .preview-box { position: static; } }
 @media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } .questions { grid-template-columns: 1fr; } .slots-panel { position: static; max-height: 300px; } .grid3, .grid2 { grid-template-columns: 1fr; } .top { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .btn.mayday { animation: none; } }
+
+/* rules screen controls (before take-off) */
+.rules-controls { margin-bottom: 14px; }
+.rules-controls.on { padding: 12px 14px; border-radius: 12px; background: rgba(242, 179, 27, .12); }
+.rules-now { margin: 0 0 10px; font-size: 16px; }
+.rules-now b { color: var(--gold); margin-right: 8px; }

@@ -4,11 +4,27 @@
 import { html, useEffect, useState } from "/vendor/preact/htm-preact.module.js";
 import { plural } from "../net.js";
 import { useRemaining } from "../stage.js";
-import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES, RESCUE_KINDS, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount } from "/shared/schema.mjs";
+import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES, RESCUE_KINDS, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount, showRules } from "/shared/schema.mjs";
 import { semantleUrl } from "/shared/rescue-bank.mjs";
 import { run, excerpt, PHASE_TEXT, MediaControls } from "./ui.js";
 
 const secs = (ms) => Math.ceil(ms / 1000 - 0.001);
+
+// Before take-off: walk the room through the rules, one card per press.
+function RulesControls({ view }) {
+  const lines = showRules(view.settings), r = view.session.rules;
+  if (!r) return html`<div class="row rules-controls"><button type="button" class="btn" disabled=${!lines.length} onClick=${() => run("showRules")} data-testid="btn-show-rules">Show the rules</button>
+    <span class="muted">${lines.length ? `${plural(lines.length, "rule")} on the projector, one at a time. Edit them in Settings.` : "Write the rules in Settings first."}</span></div>`;
+  const go = (step) => run("rulesStep", { step });
+  return html`<div class="rules-controls on" data-testid="rules-controls">
+    <p class="rules-now"><b>Rule ${r.step + 1} of ${lines.length}</b> ${lines[r.step]}</p>
+    <div class="row">
+      <button type="button" class="btn" disabled=${r.step === 0} onClick=${() => go(r.step - 1)} data-testid="btn-rule-back">Back</button>
+      <button type="button" class="btn primary" disabled=${r.step >= lines.length - 1} onClick=${() => go(r.step + 1)} data-testid="btn-rule-next">Next rule</button>
+      <button type="button" class="btn ghost" onClick=${() => run("hideRules")} data-testid="btn-hide-rules">Close the rules</button>
+    </div>
+  </div>`;
+}
 
 function Steps({ view, topic }) {
   const s = view.session, ph = s.phase;
@@ -276,6 +292,7 @@ export function ShowTab({ view, goTo }) {
       <${Steps} view=${view} topic=${topic} />
 
       <div class="panel context">
+        ${ph === "LOBBY" && html`<${RulesControls} view=${view} />`}
         ${["LOBBY", "READY_TO_FLY"].includes(ph) && html`<${NextPicker} view=${view} topic=${topic} setTopic=${setTopic} />
           ${ph === "READY_TO_FLY" && html`<div class="row"><button type="button" class="btn" onClick=${() => confirm("End the journey here and show the finale with everyone still in the game as champions?") && run("finishShow")} data-testid="btn-finish">Show the finale</button></div>`}`}
         ${ph === "FLIGHT_ANIMATING" && html`<div class="row"><button type="button" class="btn" onClick=${() => run("skipFlight")} data-testid="btn-skip">Skip the flight animation</button><span class="muted">Skipping lands on the waiting card. It does not show the question.</span></div>`}
