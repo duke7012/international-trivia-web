@@ -190,7 +190,8 @@ export const SOUND_CUES = [
   { id: "correct", label: "Correct answer appears", when: "Plays as the answer appears.", match: /correct_answer(?!_reveal)/i },
   { id: "congrats", label: "After the correct answer", when: "Plays straight after the one above.", match: /congratulations/i },
   { id: "elimination", label: "Checking eliminations", when: "Loops while you mark who is out.", match: /contestant_elimination|elimination/i },
-  { id: "rescueGame", label: "Rescue game", when: "Loops while the rescue game is on the projector (it pauses for the beat game's own beat).", match: /rescue|mayday/i },
+  { id: "rescueGame", label: "Rescue game", when: "Loops while the rescue game is on the projector (it pauses while a Say on the beat level plays).", match: /rescue|mayday/i },
+  { id: "beatTrack", label: "Say on the beat music", when: "Plays under each Say on the beat level. The game is timed to the original flag-video track; without it a built-in beat plays.", match: /say.?the.?word|on.?beat|beat.?track/i },
   { id: "finale", label: "Finale", when: "Loops while the finale is on the projector.", match: /finale/i },
 ];
 export const cueForFile = (name) => SOUND_CUES.find((c) => c.match.test(name || ""))?.id || null;
@@ -237,7 +238,7 @@ export const DEFAULT_SEMANTLE_PUZZLES = "1700, 1650, 1600, 1550, 1500, 1450, 140
 export function defaultRescue() {
   return {
     emergencyRule: "returnLastOut",
-    beat: { rate: 10, allAt: 4 },
+    beat: { rate: 30, allAt: 3 },
     doodle: { rate: 10, allAt: 7, rounds: 10, drawSeconds: 8, guessSeconds: 10 },
     // every `every` points of closeness adds `rate`%; closeness 1000 is finding the word
     semantle: { minutes: 5, puzzles: DEFAULT_SEMANTLE_PUZZLES, every: 100, rate: 5, allAt: 1000 },
@@ -254,7 +255,7 @@ export function normalizeRescue(r = {}) {
   const b = r.beat || {}, o = r.doodle || {}, m = r.semantle || {}, t = r.tower || {};
   return {
     emergencyRule: EMERGENCY_RULES[r.emergencyRule] ? r.emergencyRule : d.emergencyRule,
-    beat: { ...rated(b, d.beat), allAt: int(b.allAt, 1, 5, d.beat.allAt) },
+    beat: { ...rated(b, d.beat), allAt: int(b.allAt, 1, 3, d.beat.allAt) },
     doodle: { ...rated(o, d.doodle), rounds: int(o.rounds, 3, 20, d.doodle.rounds), drawSeconds: num(o.drawSeconds, 2, 30, d.doodle.drawSeconds), guessSeconds: int(o.guessSeconds, 3, 60, d.doodle.guessSeconds) },
     semantle: {
       minutes: num(m.minutes, 1, 30, d.semantle.minutes),
@@ -303,7 +304,7 @@ export function rescueLadder(kind, cfg) {
 
 export function rescueInfo(kind, cfg) {
   switch (kind) {
-    case "beat": return { title: "Say it on the beat", howTo: ["Eight flags light up one at a time, on the beat.", "Say each country out loud, together, right on the beat.", "Five levels, each one faster. The last level has no names!"] };
+    case "beat": return { title: "Say it on the beat", howTo: ["Eight look-alike flags appear. Take a look while the music plays.", "Then a box moves from flag to flag on the beat: say each country out loud, together.", "Three levels, five rounds each. The fifth round of every level has no names!"] };
     case "doodle": return { title: "Guess the doodle", howTo: ["A country's outline draws itself on the screen.", `Shout the country before the ${cfg.doodle.guessSeconds}-second countdown runs out.`, `${cfg.doodle.rounds} countries. No guess in time and the plane moves on.`] };
     case "semantle": return { title: "Semantle", howTo: [`Find the secret word in ${cfg.semantle.minutes} minutes.`, "Come up one at a time and type a single word.", "The closer the meaning, the higher the score out of 1000."] };
     case "tower": return { title: cfg.tower.title, howTo: ruleLines(cfg.tower.rules) };

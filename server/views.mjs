@@ -4,7 +4,7 @@
 // browser's developer tools) can never expose anything early.
 import { TOTAL_STOPS, answerText, youtubeId, publishErrors, draftWarnings, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount, showRules } from "../shared/schema.mjs";
 import { QUESTION_PHASES, ANSWER_PHASES, active, eliminated, nextFixed, topicOptions, rounds } from "../shared/engine.mjs";
-import { BEAT_BPM, semantleUrl } from "../shared/rescue-bank.mjs";
+import { BEAT_TRACK, BEAT_LEVEL_NAMES, semantleUrl } from "../shared/rescue-bank.mjs";
 import OUTLINES from "./rescue-outlines.mjs";
 
 const flag = (iso2) => `/flags/${iso2}.png`;
@@ -21,8 +21,10 @@ function stageRescue(r, cfg, out) {
   });
   if (g.status === "intro") return v;
   if (g.kind === "beat") {
-    v.bpm = BEAT_BPM[g.round] || BEAT_BPM.at(-1);
-    v.flags = g.items.levels[g.round].map((f) => ({ src: flag(f.iso2), name: f.hidden ? null : f.name }));
+    // the whole level, all five rounds: the projector moves through them on the music's clock
+    v.level = BEAT_LEVEL_NAMES[g.round] || `Level ${g.round + 1}`;
+    v.track = { stepMs: BEAT_TRACK.stepMs, leadMs: BEAT_TRACK.leadMs, fileAt: BEAT_TRACK.levels[g.round] ?? BEAT_TRACK.levels.at(-1) };
+    v.grids = g.items.levels[g.round].map((round) => round.map((f) => ({ src: flag(f.iso2), name: f.hidden ? null : f.name })));
   } else if (g.kind === "doodle") {
     // Nothing about the next country shows while it waits for Draw country: the outline
     // appears as it draws, the name once the round is marked.

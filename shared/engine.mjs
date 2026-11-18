@@ -6,7 +6,7 @@
 // revealing the answer are four separate host actions. No action here performs two of them.
 
 import { TOTAL_STOPS, publishErrors, difficultyForStop, MAX_LEAD_MS, RESCUE_KINDS, rescueScore, rescuePct, rescueCount, semantlePuzzles, showRules } from "./schema.mjs";
-import { BEAT_SETS, DOODLES, doodleMix } from "./rescue-bank.mjs";
+import { BEAT_SETS, DOODLES, doodleMix, beatRounds } from "./rescue-bank.mjs";
 
 export class ShowError extends Error {}
 const fail = (msg) => { throw new ShowError(msg); };
@@ -129,9 +129,9 @@ const freshest = (list, key, used) => {
 };
 function drawRescue(kind, used, ctx, out) {
   if (kind === "beat") {
+    // levels[L] = the five rounds of level L, eight flags each
     const set = freshest(BEAT_SETS, (x) => x.id, used.beat || [])[0];
-    const final = shuffle(set.levels.flat(), ctx.random).slice(0, 8).map((f) => ({ ...f, hidden: true }));
-    return { set: set.id, levels: [...set.levels, final] };
+    return { set: set.id, levels: set.levels.map((trio) => beatRounds(trio, ctx.random)) };
   }
   if (kind === "doodle") {
     const mix = doodleMix(ctx.rescue.doodle.rounds);

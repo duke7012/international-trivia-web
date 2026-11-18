@@ -26,7 +26,7 @@ export function RescueTab({ view }) {
     </section>
     <div class="rescue-games">
       <section class="panel">
-        <header class="panel-head"><h2>Say it on the beat</h2><span class="muted">${BEAT_SETS.length} flag sets, 5 levels each</span></header>
+        <header class="panel-head"><h2>Say it on the beat</h2><span class="muted">${BEAT_SETS.length} flag sets, 3 levels of 5 rounds each</span></header>
         <div class="grid3">${rated("beat", "level")}</div><${Ladder} kind="beat" />
       </section>
       <section class="panel">
