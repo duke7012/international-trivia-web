@@ -58,7 +58,7 @@ function InlinePreview({ form, number, settings }) {
     <div class="stage-frame" data-testid="inline-preview"><div class="stage">
       <${QuestionCard} key=${q.n.presentation + (q.n.media?.src || "")} q=${q.stage} number=${number} answer=${answer} phase=${answer ? "ANSWER_REVEALED" : "QUESTION_VISIBLE"} timer=${{ idle: true, durationMs: q.stage.countdown * 1000 }} mstate=${mstate} silent=${false} onEnded=${() => setMstate((m) => mediaReduce(m, "ended", clock.now()))} />
     </div></div>
-    ${timed && html`<${MediaControls} mstate=${mstate} label="Test the clip here (only you hear it)" onOp=${(op, v) => setMstate((m) => mediaReduce(m, op, clock.now(), v))} />`}
+    ${timed && html`<${MediaControls} mstate=${mstate} video=${q.n.presentation === "video"} label="Test the clip here (only you hear it)" onOp=${(op, v) => setMstate((m) => mediaReduce(m, op, clock.now(), v))} />`}
   </div>`;
 }
 

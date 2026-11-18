@@ -139,6 +139,10 @@ Useful extras on the dashboard: hide the question again, pause or reset the time
 early, and play, pause, replay or mute a video or audio clip. Playing a clip, or a clip ending,
 never starts the countdown.
 
+A video question opens with only the video and "Watch the following video". When the host
+presses **Stop and show the question**, or the video finishes, the question writes itself out
+and the video keeps looping, muted, beside it. **Watch again** goes back to the full video.
+
 ### What the projector knows
 
 The projector is only *sent* a question after you press Show question, and an answer after you

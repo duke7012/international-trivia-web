@@ -133,6 +133,33 @@ export function MediaPlayer({ media, kind, mstate, silent, onEnded }) {
   return html`<div class="media-frame video"><video ...${common} style=${fitStyle(media)}></video></div>`;
 }
 
+// The video beside a question once it has been watched: muted, on a loop, needing no controls.
+export function LoopPlayer({ media }) {
+  const ref = useRef();
+  const start = media.clipStart || 0, end = media.clipEnd;
+  useEffect(() => {
+    if (!media.youtube) return;
+    let dead = false, p, poll;
+    loadYouTube().then((YT) => {
+      if (dead) return;
+      const again = () => { p.seekTo(start, true); p.playVideo(); };
+      p = new YT.Player(ref.current, {
+        videoId: media.youtube, width: "100%", height: "100%",
+        playerVars: { autoplay: 1, mute: 1, controls: 0, rel: 0, playsinline: 1, disablekb: 1, start: Math.floor(start) },
+        events: { onReady: () => { p.mute(); again(); }, onStateChange: (e) => e.data === 0 && again() },
+      });
+      poll = setInterval(() => end && p.getCurrentTime?.() >= end && again(), 250);
+    });
+    return () => { dead = true; clearInterval(poll); p?.destroy?.(); };
+  }, [media.youtube]);
+  if (media.youtube) return html`<div class="media-frame video"><div ref=${ref}></div></div>`;
+  const again = (el) => { el.currentTime = start; el.play().catch(() => {}); };
+  return html`<div class="media-frame video"><video ref=${ref} src=${media.src} muted autoplay playsInline preload="auto" style=${fitStyle(media)} data-testid="loop-video"
+    onLoadedMetadata=${(e) => { e.target.muted = true; again(e.target); }}
+    onTimeUpdate=${(e) => end && e.target.currentTime >= end && again(e.target)}
+    onEnded=${(e) => again(e.target)}></video></div>`;
+}
+
 const fitStyle = (m) => `object-fit:${m.fit};object-position:${m.focusX}% ${m.focusY}%;transform:scale(${m.zoom});transform-origin:${m.focusX}% ${m.focusY}%`;
 
 // Seconds between words when the question writes itself out, and the most the whole sentence takes.
@@ -140,26 +167,39 @@ const WORD_GAP = 0.14, MAX_TYPE = 4;
 
 export function QuestionCard({ q, number, phase = "QUESTION_VISIBLE", answer = null, timer = null, mstate = null, silent = false, onEnded, onSecond, airline = "Golden Bell Air", typing = false }) {
   const hasMedia = q.presentation !== "text" && q.media;
+  const video = q.presentation === "video" && q.media;
+  const status = mstate?.status || "idle";
+  // A video question first shows only the video. The question comes up once the host stops the
+  // video or it finishes, and the video then loops silently beside it.
+  const watch = video && phase === "QUESTION_VISIBLE" && !answer && status !== "ended";
   // Write the question out word by word only when it first appears. A card that mounts later
   // (a refreshed projector after the timer started, or once the answer is out) shows it whole.
-  const [typed] = useState(() => typing && phase === "QUESTION_VISIBLE");
+  const [typedAtMount] = useState(() => typing && phase === "QUESTION_VISIBLE" && !watch);
+  const wasWatching = useRef(watch), typedLater = useRef(false);
+  if (wasWatching.current && !watch && typing && phase === "QUESTION_VISIBLE") typedLater.current = true;
+  wasWatching.current = watch;
+  const typed = typedAtMount || typedLater.current;
   const count = q.text.trim().split(/\s+/).length;
   const gap = Math.min(WORD_GAP, MAX_TYPE / Math.max(count, 1));
   const boards = phase === "BOARDS_UP";
   const revealed = !!answer;
   const long = q.text.length > 150;
-  return html`<article class="pass ${hasMedia ? "with-media" : ""} kind-${q.presentation} ${long ? "long" : ""} ${typed ? "typing" : ""}" style=${typed ? `--gap:${gap.toFixed(3)}s;--typed:${(gap * count).toFixed(2)}s` : ""} data-testid="question-card" data-phase=${phase}>
+  const player = html`<${MediaPlayer} media=${q.media} kind=${q.presentation} mstate=${mstate} silent=${silent} onEnded=${onEnded} />`;
+  return html`<article class="pass ${hasMedia ? "with-media" : ""} kind-${q.presentation} ${long ? "long" : ""} ${typed ? "typing" : ""} ${watch ? "watching" : ""}" style=${typed ? `--gap:${gap.toFixed(3)}s;--typed:${(gap * count).toFixed(2)}s` : ""} data-testid="question-card" data-phase=${phase}>
     <div class="pass-main">
       <header class="pass-head">
         <span class="pass-air">${airline}</span>
         <span class="pass-dest">Destination <b>${number ?? ""}</b></span>
         ${q.topic && html`<span class="pass-topic">${q.topic}</span>`}
       </header>
-      <div class="pass-body">
+      ${watch ? html`<div class="pass-body watch" data-testid="watch-video">
+        <p class="watch-cue">Watch the following video</p>
+        <div class="pass-media">${player}</div>
+      </div>` : html`<div class="pass-body">
         ${hasMedia && html`<div class="pass-media">
           ${q.presentation === "image"
             ? html`<div class="media-frame"><img src=${q.media.src} alt="" style=${fitStyle(q.media)} data-testid="question-image" /></div>`
-            : html`<${MediaPlayer} media=${q.media} kind=${q.presentation} mstate=${mstate} silent=${silent} onEnded=${onEnded} />`}
+            : video && status !== "playing" ? html`<${LoopPlayer} media=${q.media} />` : player}
         </div>`}
         <div class="pass-text">
           <${FitText} text=${q.text} max=${hasMedia ? 4.4 : q.choices ? 6.2 : 7} cls="q" words=${typed} />
@@ -171,7 +211,7 @@ export function QuestionCard({ q, number, phase = "QUESTION_VISIBLE", answer = n
             ${answer.explanation && html`<p class="answer-why">${answer.explanation}</p>`}
           </div>`}
         </div>
-      </div>
+      </div>`}
     </div>
     <aside class="pass-stub">
       <${TimerDial} timer=${timer} phase=${phase} onSecond=${onSecond} />

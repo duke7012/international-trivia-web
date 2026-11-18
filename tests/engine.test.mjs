@@ -328,6 +328,9 @@ test("media controls never touch the timer or the phase", () => {
   assert.equal(s.phase, "QUESTION_VISIBLE", "a clip ending does not start the countdown");
   assert.equal(s.timer, null);
   assert.ok(QUESTION_PHASES.includes(s.phase));
+  s = run(s, ctx, ["media", { op: "play" }], ["media", { op: "stop" }]);
+  assert.equal(s.media.status, "ended", "stopping counts as done watching");
+  assert.equal(s.timer, null);
 });
 
 test("the journey ends at stop 30", () => {
