@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { reduce, newSession, due, ShowError, active, eliminated, nextFixed, topicOptions, QUESTION_PHASES } from "../shared/engine.mjs";
 import { emptyQuestion, normalizeQuestion, publishErrors, defaultSettings, defaultRescue, normalizeRescue, ruleLines, rescuePct, rescueCount, rescueLadder, TOTAL_STOPS } from "../shared/schema.mjs";
 import { DOODLES } from "../shared/rescue-bank.mjs";
+import { projectorView } from "../server/views.mjs";
 
 let seq = 0;
 const q = (over = {}) => ({
@@ -463,4 +464,16 @@ test("the rules screen steps before take-off and closes when the plane flies", (
   s = run(s, ctx, "fly");
   assert.equal(s.rules, null);
   assert.throws(() => run(s, ctx, "showRules"), ShowError, "only on the start screen");
+});
+
+test("the next doodle stays hidden on the projector until Draw country", () => {
+  const ctx = makeCtx();
+  const screen = (s) => projectorView({ name: "live", session: s, settings: ctx.settings, questions: ctx.questions, rescue: ctx.rescue }, null, ctx.now).rescue;
+  let s = run(knockOutAll(roster(ctx, "A", "B"), ctx), ctx, "startRescue", ["rescuePick", { kind: "doodle" }], "rescueGo");
+  assert.ok(screen(s).outline && !screen(s).answer, "drawing: outline, no name");
+  s = run(s, ctx, ["rescueMark", { ok: true }]);
+  assert.ok(screen(s).answer, "marked: the name shows");
+  s = run(s, ctx, "rescueNext");
+  assert.equal(s.rescue.game.status, "ready");
+  assert.ok(!screen(s).outline && !screen(s).answer, "waiting for Draw country: nothing about the next country");
 });

@@ -24,10 +24,12 @@ function stageRescue(r, cfg, out) {
     v.bpm = BEAT_BPM[g.round] || BEAT_BPM.at(-1);
     v.flags = g.items.levels[g.round].map((f) => ({ src: flag(f.iso2), name: f.hidden ? null : f.name }));
   } else if (g.kind === "doodle") {
+    // Nothing about the next country shows while it waits for Draw country: the outline
+    // appears as it draws, the name once the round is marked.
     const c = g.items[g.round];
-    v.outline = OUTLINES[c.iso3] || null;
     v.drawMs = Math.round(cfg.doodle.drawSeconds * 1000);
-    if (g.status !== "playing") v.answer = { name: c.name, flag: flag(c.iso2), ok: !!g.results[g.round] };
+    if (g.status !== "ready") v.outline = OUTLINES[c.iso3] || null;
+    if (["marked", "done"].includes(g.status)) v.answer = { name: c.name, flag: flag(c.iso2), ok: !!g.results[g.round] };
   } else if (g.kind === "semantle") {
     v.puzzle = g.items.puzzle; v.url = semantleUrl(g.items.puzzle);
   }
