@@ -39,6 +39,20 @@ function sounds(prev, v) {
   if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight" && !own("flight")) play.takeoff();
   // A new rescue game: the built-in alarm, unless the host has their own music for it.
   if (v.rescue && prev.rescue?.attempt !== v.rescue.attempt && !own("rescueGame")) play.mayday();
+  const r = v.rescue, pr = prev.rescue;
+  if (r?.kind && pr?.kind === r.kind && pr.attempt === r.attempt) {
+    if (r.kind === "beat" && r.status === "playing" && pr.startedAt !== r.startedAt) {
+      // count-in, then one beat per flag, then a closing hit, all timed from the server's start
+      const ms = beatMs(r.bpm);
+      for (let i = 0; i <= COUNT_IN + r.flags.length; i++) {
+        const t = (r.startedAt + i * ms - clock.now()) / 1000;
+        if (t > -0.03) play.beat(Math.max(0, t), i < COUNT_IN ? "count" : i === COUNT_IN + r.flags.length ? "end" : "flag", ms / 1000);
+      }
+    }
+    if (r.status === "marked" && pr.status === "playing") (r.results[r.round] ? play.right : play.wrong)();
+    if (r.status === "timeUp" && pr.status === "playing") play.timeUp();
+    if (r.status === "done" && pr.status !== "done" && r.count > 0) play.fanfare();
+  }
 }
 
 function sceneFor(v) {
@@ -130,15 +144,93 @@ function AllOut({ v }) {
   </section>`;
 }
 
+// ----- rescue games -----
+const useNow = (ms, on = true) => {
+  const [t, setT] = useState(clock.now());
+  useEffect(() => { if (!on) return; const i = setInterval(() => setT(clock.now()), ms); return () => clearInterval(i); }, [ms, on]);
+  return on ? t : clock.now();
+};
+const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const COUNT_IN = 4;
+const beatMs = (bpm) => 60000 / bpm;
+
+function Countdown({ deadline, big }) {
+  const now = useNow(200, !!deadline);
+  return html`<p class="rg-clock ${big ? "big" : ""} ${deadline && deadline - now < 10500 ? "low" : ""}" data-testid="rescue-clock">${deadline ? mmss(deadline - now) : "0:00"}</p>`;
+}
+
+function Beat({ r }) {
+  const playing = r.status === "playing";
+  const now = useNow(25, playing);
+  const n = playing ? Math.floor((now - r.startedAt) / beatMs(r.bpm)) - COUNT_IN : -99;
+  const count = playing && n < 0 && n >= -COUNT_IN ? n + COUNT_IN + 1 : null;
+  return html`<div class="beat" data-testid="beat-grid">
+    <div class="beat-grid">${r.flags.map((f, i) => html`<figure class="${i === n ? "lit" : ""} ${playing && i < n ? "said" : ""}"><img src=${f.src} alt="" draggable="false" />${f.name && html`<figcaption>${f.name}</figcaption>`}</figure>`)}</div>
+    <p class="beat-cue">${count ? html`<b class="count" key=${count}>${count}</b>` : playing && n >= r.flags.length ? "Level over" : !playing ? `Level ${r.round + 1} · ${r.bpm} beats a minute${r.flags[0].name ? "" : " · no names!"}` : ""}</p>
+  </div>`;
+}
+
+function Doodle({ r }) {
+  const playing = r.status === "playing";
+  const now = useNow(200, playing);
+  const guessing = playing && now >= r.startedAt + r.drawMs;
+  const last = useRef(null);
+  const [into] = useState(() => clock.now() - (r.startedAt || 0)); // fixed per country (the component is keyed by it)
+  const left = guessing ? Math.ceil((r.deadline - now) / 1000) : null;
+  useEffect(() => { if (!MONITOR && guessing && left !== last.current && left > 0) { last.current = left; play.tick("ticks", left <= 3); } }, [left]);
+  const o = r.outline;
+  return html`<div class="doodle" data-testid="doodle">
+    ${o && html`<svg viewBox=${`-40 -40 ${o.w + 80} ${o.h + 80}`} class=${r.answer ? "done" : ""}><path key=${r.round + ":" + r.startedAt} d=${o.d} pathLength="1" style=${playing ? `animation-duration:${r.drawMs}ms;animation-delay:${-into}ms` : ""} class=${playing ? "drawing" : ""} /></svg>`}
+    <div class="doodle-side">
+      ${guessing && html`<p class="rg-clock big ${left <= 3 ? "low" : ""}" data-testid="doodle-count">${Math.max(0, left)}</p>`}
+      ${playing && !guessing && html`<p class="doodle-note">Drawing…</p>`}
+      ${r.answer && html`<div class="doodle-answer ${r.answer.ok ? "ok" : "miss"}" data-testid="doodle-answer"><img src=${r.answer.flag} alt="" /><b>${r.answer.name}</b><span>${r.answer.ok ? "Got it!" : "Missed"}</span></div>`}
+      ${!playing && !r.answer && html`<p class="doodle-note">Country ${r.round + 1} of ${r.rounds}</p>`}
+    </div>
+  </div>`;
+}
+
+function Semantle({ r }) {
+  return html`<div class="semantle" data-testid="semantle">
+    ${MONITOR ? html`<div class="semantle-stub">Semantle #${r.puzzle} is open on the projector</div>` : html`<iframe src=${r.url} title=${`Semantle puzzle ${r.puzzle}`} allow="clipboard-write"></iframe>`}
+    <div class="semantle-clock">${r.status === "playing" ? html`<${Countdown} deadline=${r.deadline} />` : html`<p class="rg-clock low">Time's up</p>`}</div>
+  </div>`;
+}
+
+function ScoreStrip({ r }) {
+  const rounds = ["beat", "doodle"].includes(r.kind);
+  return html`<footer class="rg-score" data-testid="rescue-score">
+    ${rounds && html`<ol class="rg-dots">${Array.from({ length: r.rounds }, (_, i) => html`<li class=${r.results[i] === true ? "ok" : r.results[i] === false ? "miss" : i === r.round ? "now" : ""}></li>`)}</ol>`}
+    <p><b>${r.pct}%</b> back on board · ${r.count} of ${r.out} passengers</p>
+  </footer>`;
+}
+
 function Rescue({ v }) {
   const r = v.rescue;
-  return html`<section class="rescue" data-testid="rescue-game">
-    <div class="hazard top"></div>
-    <p class="alarm-kicker"><i class="lamp"></i>Mayday! Save the flight!${r.attempt > 1 ? ` Round ${r.attempt}` : ""}</p>
-    <h1 data-testid="rescue-title">${r.title}</h1>
-    <ol class="game-rules ${r.rules.length > 6 ? "many" : ""}" data-testid="rescue-rules">
-      ${r.rules.map((line, i) => html`<li style=${`animation-delay:${0.25 + i * 0.12}s`}>${line}</li>`)}
-    </ol>
+  const head = html`<div class="hazard top"></div><p class="alarm-kicker"><i class="lamp"></i>Mayday! Save the flight!${r.attempt > 1 ? ` Round ${r.attempt}` : ""}</p>`;
+  if (!r.kind) return html`<section class="rescue" data-testid="rescue-game">${head}<h1 data-testid="rescue-title">Rescue game</h1><p class="rg-lead">Everyone who is out plays as one team. The host is choosing the game…</p></section>`;
+  if (r.status === "intro") {
+    return html`<section class="rescue" data-testid="rescue-game" data-kind=${r.kind}>${head}
+      <h1 data-testid="rescue-title">${r.title}</h1>
+      <ol class="game-rules ${r.howTo.length > 6 ? "many" : ""}" data-testid="rescue-rules">${r.howTo.map((line, i) => html`<li style=${`animation-delay:${0.25 + i * 0.12}s`}>${line}</li>`)}</ol>
+      <ul class="ladder" data-testid="rescue-ladder">${r.ladder.map((l) => html`<li>${l}</li>`)}</ul>
+    </section>`;
+  }
+  if (r.status === "done") {
+    return html`<section class="rescue done" data-testid="rescue-game" data-kind=${r.kind}>${head}
+      <p class="rg-lead">${r.title}: ${r.kind === "semantle" ? (r.score >= 1000 ? "the word was found!" : `closest guess ${r.score} / 1000`) : r.kind === "tower" ? `a tower ${r.score} ${r.score === 1 ? "level" : "levels"} high` : `${r.score} of ${r.rounds} ${r.kind === "beat" ? "levels" : "countries"}`}</p>
+      <h1 data-testid="rescue-result">${r.count === 0 ? "Nobody returns this time" : r.count >= r.out ? "Everyone is back on board!" : `${r.count} of ${r.out} passengers return`}</h1>
+      <p class="rg-pct">${r.pct}%</p>
+    </section>`;
+  }
+  return html`<section class="rescue playing rg-${r.kind}" data-testid="rescue-game" data-kind=${r.kind} data-status=${r.status}>${head}
+    ${r.kind !== "semantle" && html`<h2 class="rg-title">${r.title}</h2>`}
+    ${r.kind === "beat" && html`<${Beat} r=${r} />`}
+    ${r.kind === "doodle" && html`<${Doodle} r=${r} key=${r.round + ":" + r.startedAt} />`}
+    ${r.kind === "semantle" && html`<${Semantle} r=${r} />`}
+    ${r.kind === "tower" && html`<div class="tower"><ol class="game-rules ${r.howTo.length > 5 ? "many" : ""}">${r.howTo.map((line) => html`<li>${line}</li>`)}</ol>
+      ${r.status === "playing" ? html`<${Countdown} deadline=${r.deadline} big />` : html`<p class="rg-clock big low">Time's up</p>`}</div>`}
+    <${ScoreStrip} r=${r} />
   </section>`;
 }
 

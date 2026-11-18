@@ -5,7 +5,8 @@
 // The rule this file exists to protect: flying, showing the question, starting the timer and
 // revealing the answer are four separate host actions. No action here performs two of them.
 
-import { TOTAL_STOPS, publishErrors, difficultyForStop, MAX_LEAD_MS } from "./schema.mjs";
+import { TOTAL_STOPS, publishErrors, difficultyForStop, MAX_LEAD_MS, RESCUE_KINDS, rescueScore, rescuePct, rescueCount, semantlePuzzles } from "./schema.mjs";
+import { BEAT_SETS, DOODLES, doodleMix } from "./rescue-bank.mjs";
 
 export class ShowError extends Error {}
 const fail = (msg) => { throw new ShowError(msg); };
@@ -30,7 +31,7 @@ export function newSession() {
     shown: null, timer: null, media: idleMedia(),
     played: [], contestants: [],
     review: null, lastReview: null, topicBoard: null,
-    rescue: null, rescueAttempts: 0, lastRescue: null,
+    rescue: null, rescueAttempts: 0, lastRescue: null, rescueUsed: { beat: [], doodle: [], semantle: [] },
     allOutAtStop: null, answerAt: 0,
   };
 }
@@ -114,6 +115,36 @@ const setStatus = (s, ids, status, stop) => {
 };
 const afterElimination = (s) => (active(s).length === 0 && s.contestants.length > 0 ? { ...s, phase: "ALL_ELIMINATED", allOutAtStop: s.stop, rescue: null, topicBoard: null } : s);
 const snapshot = (q, slot) => ({ question: structuredClone(q), slot, sourceUpdatedAt: q.updatedAt });
+// ----- rescue helpers -----
+const game = (s, what) => { need(s, ["RESCUE"], what); return s.rescue?.game || fail("Choose a rescue game first."); };
+export const rounds = (g) => (g.kind === "beat" ? g.items.levels.length : g.kind === "doodle" ? g.items.length : 1);
+const shuffle = (list, random) => { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+// Unused first, in bank order; once everything has been used, the longest-unused first.
+const freshest = (list, key, used) => {
+  const last = (x) => used.lastIndexOf(key(x));
+  return [...list].sort((a, b) => last(a) - last(b));
+};
+function drawRescue(kind, used, ctx) {
+  if (kind === "beat") {
+    const set = freshest(BEAT_SETS, (x) => x.id, used.beat || [])[0];
+    const final = shuffle(set.levels.flat(), ctx.random).slice(0, 8).map((f) => ({ ...f, hidden: true }));
+    return { set: set.id, levels: [...set.levels, final] };
+  }
+  if (kind === "doodle") {
+    const mix = doodleMix(ctx.rescue.doodle.rounds);
+    return ["easy", "medium", "hard"].flatMap((level) => {
+      const pool = DOODLES.filter((c) => c.level === level);
+      const order = freshest(shuffle(pool, ctx.random), (c) => c.iso3, used.doodle || []);
+      return order.slice(0, mix[level]).map(({ name, iso2, iso3 }) => ({ name, iso2, iso3 }));
+    });
+  }
+  if (kind === "semantle") {
+    const list = semantlePuzzles(ctx.rescue.semantle.puzzles);
+    if (!list.length) fail("Add Semantle puzzle numbers in the Rescue tab first.");
+    return { puzzle: freshest(list, (n) => n, used.semantle || [])[0] };
+  }
+  return {};
+}
 const backInTheAir = (s, returnedIds, now, extra = {}) => ({
   ...s,
   contestants: setStatus(s, returnedIds, "active", null),
@@ -253,18 +284,82 @@ const handlers = {
     return afterElimination(next);
   },
 
-  // ----- MAYDAY rescue game (only ever reachable from ALL_ELIMINATED, only ever started by the host) -----
-  // Every eliminated contestant plays a physical game in the room while the projector shows its
-  // rules. The app does not score it: the host picks who won their way back.
+  // ----- MAYDAY rescue (only ever reachable from ALL_ELIMINATED, only ever started by the host) -----
+  // Everyone who is out plays one game as a team. The host runs it round by round; the team's
+  // score sets how many may return, and the host picks who.
   startRescue(s) {
     need(s, ["ALL_ELIMINATED"], "The rescue game");
-    return { ...s, phase: "RESCUE", topicBoard: null, rescueAttempts: s.rescueAttempts + 1, rescue: { attempt: s.rescueAttempts + 1 } };
+    return { ...s, phase: "RESCUE", topicBoard: null, rescueAttempts: s.rescueAttempts + 1, rescue: { attempt: s.rescueAttempts + 1, game: null } };
+  },
+  rescuePick(s, { kind }, ctx) {
+    need(s, ["RESCUE"], "Choosing the rescue game");
+    if (!RESCUE_KINDS.includes(kind)) fail("Unknown rescue game.");
+    if (s.rescue.game && s.rescue.game.status !== "intro") fail("A game is already under way. Leave the rescue to start over.");
+    const items = drawRescue(kind, s.rescueUsed || {}, ctx);
+    return { ...s, rescue: { ...s.rescue, game: { kind, items, round: 0, status: "intro", startedAt: null, deadline: null, results: [], score: null } } };
+  },
+  rescueGo(s, _, ctx) {
+    const g = game(s, "Starting the game");
+    const cfg = ctx.rescue, now = ctx.now;
+    let next;
+    if (g.kind === "beat") {
+      if (!["intro", "ready", "playing"].includes(g.status)) fail("Mark this level first.");
+      next = { ...g, status: "playing", startedAt: now };
+    } else if (g.kind === "doodle") {
+      if (!["intro", "ready"].includes(g.status)) fail("This country is already on screen.");
+      next = { ...g, status: "playing", startedAt: now, deadline: now + Math.round((cfg.doodle.drawSeconds + cfg.doodle.guessSeconds) * 1000) };
+    } else {
+      if (g.status !== "intro") fail("The timer has already run.");
+      const ms = g.kind === "semantle" ? cfg.semantle.minutes * 60000 : cfg.tower.seconds * 1000;
+      next = { ...g, status: "playing", startedAt: now, deadline: now + Math.round(ms) };
+    }
+    // What a game uses is spent once it starts, so the next rescue round gets fresh ones.
+    const used = s.rescueUsed || { beat: [], doodle: [], semantle: [] };
+    const rescueUsed = g.status !== "intro" ? used
+      : g.kind === "beat" ? { ...used, beat: [...used.beat, g.items.set] }
+      : g.kind === "doodle" ? { ...used, doodle: [...used.doodle, ...g.items.map((c) => c.iso3)] }
+      : g.kind === "semantle" ? { ...used, semantle: [...used.semantle, g.items.puzzle] } : used;
+    return { ...s, rescueUsed, rescue: { ...s.rescue, game: next } };
+  },
+  rescueMark(s, { ok }) {
+    const g = game(s, "Marking the round");
+    if (!["beat", "doodle"].includes(g.kind)) fail("This game is scored at the end.");
+    if (g.status !== "playing") fail("Start the round first.");
+    const results = [...g.results]; results[g.round] = !!ok;
+    return { ...s, rescue: { ...s.rescue, game: { ...g, results, status: "marked", deadline: null } } };
+  },
+  rescueNext(s) {
+    const g = game(s, "Moving on");
+    if (g.status !== "marked") fail("Mark this round first.");
+    const last = g.round + 1 >= rounds(g);
+    return { ...s, rescue: { ...s.rescue, game: { ...g, round: last ? g.round : g.round + 1, status: last ? "done" : "ready", startedAt: last ? g.startedAt : null } } };
+  },
+  rescueScore(s, { score }) {
+    const g = game(s, "Entering the score");
+    if (!["semantle", "tower"].includes(g.kind)) fail("This game is scored round by round.");
+    if (g.status === "intro") fail("Start the game first.");
+    const n = Math.round(Number(score));
+    const max = g.kind === "semantle" ? 1000 : 99;
+    if (!Number.isFinite(n) || n < 0 || n > max) fail(g.kind === "semantle" ? "Enter the closeness from 0 to 1000 (1000 if they found the word)." : "Enter how many levels the tower reached.");
+    return { ...s, rescue: { ...s.rescue, game: { ...g, score: n, status: "done", deadline: null } } };
+  },
+  // The clock: a doodle nobody guessed is a miss; a timed game stops and waits for its score.
+  rescueTimeout(s) {
+    const g = game(s, "Calling time");
+    if (g.status !== "playing" || !g.deadline) return s;
+    if (g.kind === "doodle") return handlers.rescueMark(s, { ok: false });
+    return { ...s, rescue: { ...s.rescue, game: { ...g, status: "timeUp", deadline: null } } };
   },
   rescueApply(s, { ids }, ctx) {
-    need(s, ["RESCUE"], "Returning contestants");
-    const okIds = new Set(eliminated(s).map((c) => c.id)); // never includes an active contestant
+    const g = game(s, "Returning contestants");
+    if (g.status !== "done") fail("Finish the game first.");
+    const out = eliminated(s);
+    const okIds = new Set(out.map((c) => c.id)); // never includes an active contestant
     const back = [...new Set(ids || [])];
-    if (!back.length) fail("Pick who won their way back.");
+    const max = rescueCount(rescuePct(g.kind, rescueScore(g), ctx.rescue), out.length);
+    if (!max) fail("The team did not score enough to bring anyone back. Use an emergency exit or leave the rescue.");
+    if (!back.length) fail("Pick who returns.");
+    if (back.length > max) fail(`The team earned ${max} ${max === 1 ? "place" : "places"} back on board.`);
     if (back.some((id) => !okIds.has(id))) fail("Only eliminated contestants can return.");
     return backInTheAir(s, back, ctx.now, { via: "rescue" });
   },
@@ -319,8 +414,10 @@ export function reduce(session, action, ctx) {
   return next === session ? session : { ...next, rev: session.rev + 1 };
 }
 
-// What the clock alone is allowed to do: land the plane and raise the boards.
+// What the clock alone is allowed to do: land the plane, raise the boards, and end a rescue round.
 export function due(session, now) {
+  const g = session.phase === "RESCUE" && session.rescue?.game;
+  if (g && g.status === "playing" && g.deadline && now >= g.deadline) return { type: "rescueTimeout" };
   if (session.phase === "FLIGHT_ANIMATING" && session.flight && now >= session.flight.startedAt + session.flight.durationMs) return { type: "arrive" };
   if (session.phase === "TIMER_RUNNING" && session.timer.running && now >= session.timer.deadline) return { type: "timeUp" };
   return null;

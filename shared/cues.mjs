@@ -44,6 +44,8 @@ export function planAudio(v, now) {
     case "ELIMINATION_REVIEW":
       return plan(`elimination:${v.stop}`, [{ cue: "elimination", loop: true }]);
     case "RESCUE":
+      // The beat game brings its own beat; the music would only fight it.
+      if (v.rescue?.kind === "beat" && v.rescue.status === "playing") return null;
       return plan(`rescue:${v.rescue?.attempt}`, [{ cue: "rescueGame", loop: true }]);
     case "FINISHED":
       return plan(`finale:${v.stop}`, [{ cue: "finale", loop: true }]);

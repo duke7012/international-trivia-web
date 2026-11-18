@@ -56,5 +56,12 @@ export const play = {
   wrong: () => { tone({ f: 196, d: 0.4, type: "sawtooth", g: 0.14 }); tone({ f: 147, t: 0.18, d: 0.5, type: "sawtooth", g: 0.14 }); },
   timeUp: () => { tone({ f: 220, d: 0.9, type: "square", g: 0.16 }); tone({ f: 165, t: 0.05, d: 0.9, type: "square", g: 0.12 }); },
   fanfare: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone({ f, t: i * 0.13, d: i === 6 ? 1.2 : 0.3, g: 0.2, type: "triangle" })),
+  // one beat of the rescue beat game, t seconds from now; "flag" beats get an off-beat hat too
+  beat: (t, kind, beatSec) => {
+    if (kind === "count") { tone({ f: 1320, t, d: 0.08, type: "square", g: 0.12 }); return; }
+    tone({ f: 140, to: 45, t, d: 0.22, g: 0.55 }); // kick
+    if (kind === "end") { noise({ t, d: 0.6, g: 0.25, from: 4000, to: 1500 }); return; }
+    noise({ t: t + beatSec / 2, d: 0.05, g: 0.12, from: 7000, to: 9000 });
+  },
   goldenBell: () => { bell(0, 587, 0.4, 3); bell(0.7, 587, 0.4, 3); bell(1.4, 587, 0.44, 4); play.fanfare(); },
 };

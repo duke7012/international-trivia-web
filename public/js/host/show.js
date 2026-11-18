@@ -4,7 +4,8 @@
 import { html, useEffect, useState } from "/vendor/preact/htm-preact.module.js";
 import { plural } from "../net.js";
 import { useRemaining } from "../stage.js";
-import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES } from "/shared/schema.mjs";
+import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES, RESCUE_KINDS, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount } from "/shared/schema.mjs";
+import { semantleUrl } from "/shared/rescue-bank.mjs";
 import { run, excerpt, PHASE_TEXT, MediaControls } from "./ui.js";
 
 const secs = (ms) => Math.ceil(ms / 1000 - 0.001);
@@ -154,22 +155,75 @@ function AllOut({ view }) {
   const s = view.session;
   return html`<div class="allout" data-testid="allout-panel">
     <p class="alert">Everyone has been eliminated. The plane has made an emergency stop at destination ${s.stop}. Nothing happens until you choose.</p>
-    <p class="note">The rescue game puts the rules of "${view.rescue.title}" on the projector for everyone who is out. Edit them in the Rescue tab.</p>
+    <p class="note">In the rescue, everyone who is out plays one game as a team, and their score sets how many come back. You choose the game next. Scoring is set in the Rescue tab.</p>
     <button type="button" class="btn mayday big" disabled=${!!view.preview} onClick=${() => run("startRescue")} data-testid="btn-rescue-start">START RESCUE GAME</button>
     <${EmergencyExits} view=${view} />
   </div>`;
 }
 
+function RescueClock({ deadline }) {
+  const ms = useRemaining({ running: true, deadline, durationMs: Infinity });
+  const t = secs(ms);
+  return html`<b class="readout" data-testid="rescue-host-clock">${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}</b>`;
+}
+
+function RescueGame({ g }) {
+  const [score, setScore] = useState("");
+  const go = (label, testid = "btn-rescue-go") => html`<button type="button" class="btn primary big" onClick=${() => run("rescueGo")} data-testid=${testid}>${label}</button>`;
+  const mark = html`<div class="row"><button type="button" class="btn primary" onClick=${() => run("rescueMark", { ok: true })} data-testid="btn-rescue-ok">✓ They got it</button>
+    <button type="button" class="btn warn" onClick=${() => run("rescueMark", { ok: false })} data-testid="btn-rescue-miss">✗ Missed</button></div>`;
+  const next = html`<button type="button" class="btn primary big" onClick=${() => run("rescueNext")} data-testid="btn-rescue-next">${g.round + 1 >= (g.kind === "beat" ? g.items.levels.length : g.items.length) ? "See the result" : "Next"}</button>`;
+  if (g.kind === "beat") {
+    const level = g.items.levels[g.round];
+    return html`<div class="rescue-game">
+      <p><b>Level ${g.round + 1} of ${g.items.levels.length}</b>${g.round === g.items.levels.length - 1 ? " (no names on screen)" : ""}: <span class="muted">${level.map((f) => f.name).join(", ")}</span></p>
+      ${g.status === "ready" && go(`Play level ${g.round + 1}`)}
+      ${g.status === "playing" && html`${mark}<button type="button" class="btn ghost small" onClick=${() => run("rescueGo")} data-testid="btn-rescue-again">Play this level again</button>`}
+      ${g.status === "marked" && next}
+    </div>`;
+  }
+  if (g.kind === "doodle") {
+    const c = g.items[g.round];
+    return html`<div class="rescue-game">
+      <p><b>Country ${g.round + 1} of ${g.items.length}:</b> <span class="secret-answer" data-testid="doodle-host-answer">${c.name}</span></p>
+      ${g.status === "ready" && go(`Draw country ${g.round + 1}`)}
+      ${g.status === "playing" && html`<div class="clock-row"><${RescueClock} deadline=${g.deadline} /><span class="muted">Skips by itself when the countdown ends.</span></div>${mark}`}
+      ${g.status === "marked" && next}
+    </div>`;
+  }
+  const semantle = g.kind === "semantle";
+  return html`<div class="rescue-game">
+    ${semantle && html`<p>Semantle puzzle <a href=${semantleUrl(g.items.puzzle)} target="_blank" rel="noopener">#${g.items.puzzle}</a> is on the projector. Contestants type there.</p>`}
+    ${g.status === "playing" && html`<div class="clock-row"><${RescueClock} deadline=${g.deadline} /><button type="button" class="btn" onClick=${() => run("rescueTimeout")} data-testid="btn-rescue-stop">Stop the clock</button></div>`}
+    <div class="row">
+      <label class="field-label">${semantle ? "Best closeness out of 1000 (1000 = found the word)" : "Tower levels still standing"}
+        <input type="number" min="0" max=${semantle ? 1000 : 99} class="narrow" value=${score} onInput=${(e) => setScore(e.target.value)} data-testid="rescue-score-input" /></label>
+      <button type="button" class="btn primary" disabled=${score === ""} onClick=${() => run("rescueScore", { score: Number(score) })} data-testid="btn-rescue-score">Save the score</button>
+    </div>
+  </div>`;
+}
+
 function RescuePanel({ view }) {
-  const s = view.session, r = s.rescue;
+  const s = view.session, r = s.rescue, g = r.game, cfg = view.rescue;
   const out = s.contestants.filter((c) => c.status === "eliminated");
   const [ids, setIds] = useState([]);
-  return html`<div class="rescue-panel" data-testid="rescue-panel">
-    <div class="row between"><b>Rescue game${r.attempt > 1 ? `, round ${r.attempt}` : ""}</b><button type="button" class="btn ghost small" onClick=${() => confirm("Leave the rescue game and go back to the emergency screen?") && run("rescueAbort")} data-testid="btn-rescue-leave">Leave rescue</button></div>
-    <p class="note">The projector shows the rules of "${view.rescue.title}". Play the game in the room, then tick who won their way back on board.</p>
-    <div class="row"><button type="button" class="btn ghost small" onClick=${() => setIds(out.map((c) => c.id))} data-testid="return-all">Select everyone</button><button type="button" class="btn ghost small" onClick=${() => setIds([])}>Clear</button><span class="muted">${ids.length} of ${out.length} selected</span></div>
-    <${PickPeople} people=${out} value=${ids} onChange=${setIds} testid="return-pick" />
-    <button type="button" class="btn primary big" disabled=${!ids.length} onClick=${() => run("rescueApply", { ids })} data-testid="btn-rescue-apply">Return ${plural(ids.length, "contestant")} to the flight</button>
+  const pct = g ? rescuePct(g.kind, rescueScore(g), cfg) : 0, max = rescueCount(pct, out.length);
+  const intro = !g || g.status === "intro";
+  return html`<div class="rescue-panel" data-testid="rescue-panel" data-status=${g?.status || "choose"}>
+    <div class="row between"><b>Rescue game${r.attempt > 1 ? `, round ${r.attempt}` : ""}${g ? `: ${rescueInfo(g.kind, cfg).title}` : ""}</b><button type="button" class="btn ghost small" onClick=${() => confirm("Leave the rescue game and go back to the emergency screen?") && run("rescueAbort")} data-testid="btn-rescue-leave">Leave rescue</button></div>
+    ${intro && html`<p class="note">Everyone who is out plays as one team. Pick the game, check it on the projector, then start it.</p>
+      <div class="row">${RESCUE_KINDS.map((k) => html`<button type="button" class="btn ${g?.kind === k ? "on" : ""}" onClick=${() => run("rescuePick", { kind: k })} data-testid=${`rescue-pick-${k}`}>${rescueInfo(k, cfg).title}</button>`)}</div>
+      ${g && html`<ul class="ladder-host">${rescueLadder(g.kind, cfg).map((l) => html`<li>${l}</li>`)}</ul>
+        ${g.kind === "doodle" && html`<p class="muted">Countries: ${g.items.map((c) => c.name).join(", ")}</p>`}
+        ${g.kind === "semantle" && html`<p class="muted">Puzzle #${g.items.puzzle}. The projector loads it when you start.</p>`}
+        <button type="button" class="btn primary big" onClick=${() => run("rescueGo")} data-testid="btn-rescue-go">Start ${rescueInfo(g.kind, cfg).title}</button>`}`}
+    ${g && !intro && g.status !== "done" && html`<${RescueGame} g=${g} key=${g.kind} />`}
+    ${g && !intro && html`<p class="rescue-tally" data-testid="rescue-tally">Score <b>${rescueScore(g)}</b> → <b>${pct}%</b> → <b>${max} of ${out.length}</b> may return</p>`}
+    ${g?.status === "done" && (max > 0 ? html`
+      <div class="row"><button type="button" class="btn ghost small" onClick=${() => setIds(out.slice(0, max).map((c) => c.id))} data-testid="return-all">${max >= out.length ? "Select everyone" : `Select the first ${max}`}</button><button type="button" class="btn ghost small" onClick=${() => setIds([])}>Clear</button><span class="muted">${ids.length} of ${max} chosen</span></div>
+      <${PickPeople} people=${out} value=${ids} onChange=${setIds} max=${max} testid="return-pick" />
+      <button type="button" class="btn primary big" disabled=${!ids.length} onClick=${() => run("rescueApply", { ids })} data-testid="btn-rescue-apply">Return ${plural(ids.length, "contestant")} to the flight</button>`
+      : html`<p class="warn">The team did not score enough to bring anyone back. Use an emergency option below, or leave the rescue and try another game.</p>`)}
     <${EmergencyExits} view=${view} />
   </div>`;
 }

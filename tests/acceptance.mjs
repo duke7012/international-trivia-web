@@ -160,12 +160,11 @@ try {
   // Flight length is set through the Settings tab. Long enough that a slow test machine can
   // still catch the plane in the air; later flights are skipped with the host's Skip button.
   await tab("settings"); await H("set-flight").fill("20"); await H("btn-save-settings").click(); await notice(/Settings saved/);
-  // the rescue game's name and rules, stored apart from the question bank
+  // the physical rescue game's name and rules, stored apart from the question bank
   await tab("rescue");
   await H("rescue-title").fill("Paper plane relay");
   await H("rescue-rules").fill("Fold a paper plane\n\nThrow it past the line");
-  assert(/2 rules/.test(await H("rules-count").innerText()), "blank lines are not rules");
-  await H("btn-save-rescue").click(); await notice(/Rescue game saved/);
+  await H("btn-save-rescue").click(); await notice(/Rescue games saved/);
 
   await scenario(7, "Start the airplane animation: no question is revealed", async () => {
     await tab("show");
@@ -248,23 +247,29 @@ try {
     await P("rescue-game").waitFor();
   });
 
-  await scenario(16, "The projector shows the rescue game's rules", async () => {
+  await scenario(16, "The host picks the physical game and the projector shows its rules", async () => {
+    await H("rescue-pick-tower").click();
+    await P("rescue-ladder").waitFor();
     assert((await P("rescue-title").innerText()) === "Paper plane relay", "the game's name");
     const rules = await proj.locator('[data-testid="rescue-rules"] li').allInnerTexts();
     assert(rules.join("|") === "Fold a paper plane|Throw it past the line", `one numbered rule per line, got ${rules.join("|")}`);
-    await sleep(2500);
-    assert((await wire("host")).session.phase === "RESCUE", "the game never ends by itself");
-    await proj.reload(); await P("rescue-game").waitFor(); // a refreshed projector comes back to the rules
+    await H("btn-rescue-go").click();
+    await P("rescue-clock").waitFor();
+    await proj.reload(); await P("rescue-clock").waitFor(); // a refreshed projector comes back to the game
   });
 
-  await scenario(17, "The host returns the winners of the game", async () => {
-    assert(await H("btn-rescue-apply").isDisabled(), "pick the winners first");
-    await H("return-pick-Sofia").check(); await H("return-pick-Leo").check();
+  await scenario(17, "The team's score sets how many may return, and the host picks who", async () => {
+    await H("rescue-score-input").fill("2");
+    await H("btn-rescue-score").click();
+    await P("rescue-result").waitFor();
+    assert(await H("btn-rescue-apply").isDisabled(), "pick who returns first");
+    await H("return-pick-Sofia").check();
+    assert(await H("return-pick-Leo").isDisabled(), "2 levels at 10% earns one place");
     await H("btn-rescue-apply").click();
     await phase("READY_TO_FLY");
     await P("rescue-done").waitFor();
     const s = (await wire("host")).session;
-    assert(s.contestants.filter((c) => c.status === "active").map((c) => c.name).sort().join() === "Leo,Sofia", "exactly the chosen two are back");
+    assert(s.contestants.filter((c) => c.status === "active").map((c) => c.name).join() === "Sofia", "exactly the chosen one is back");
   });
 
   await scenario(18, "The journey resumes with the next unplayed question", async () => {

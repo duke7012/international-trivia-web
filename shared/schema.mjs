@@ -177,7 +177,7 @@ export const SOUND_CUES = [
   { id: "correct", label: "Correct answer appears", when: "Plays as the answer appears.", match: /correct_answer(?!_reveal)/i },
   { id: "congrats", label: "After the correct answer", when: "Plays straight after the one above.", match: /congratulations/i },
   { id: "elimination", label: "Checking eliminations", when: "Loops while you mark who is out.", match: /contestant_elimination|elimination/i },
-  { id: "rescueGame", label: "Rescue game", when: "Loops while the rescue game's rules are on the projector.", match: /rescue|mayday/i },
+  { id: "rescueGame", label: "Rescue game", when: "Loops while the rescue game is on the projector (it pauses for the beat game's own beat).", match: /rescue|mayday/i },
   { id: "finale", label: "Finale", when: "Loops while the finale is on the projector.", match: /finale/i },
 ];
 export const cueForFile = (name) => SOUND_CUES.find((c) => c.match.test(name || ""))?.id || null;
@@ -209,26 +209,91 @@ export const EMERGENCY_RULES = {
   endShow: "The show ends here",
 };
 
-// The rescue is a physical game the eliminated contestants play in the room. The app only shows
-// its rules on the projector; the host then picks who won their way back on board.
-export const DEFAULT_GAME_RULES = [
-  "Every eliminated passenger plays.",
-  "Listen to the host for how the game works.",
-  "Winners get back on the flight.",
+// The rescue: every eliminated contestant plays one of four games as a team. The team's score sets
+// what share of them comes back on board; the host then picks who, up to that number.
+export const RESCUE_KINDS = ["beat", "doodle", "semantle", "tower"];
+export const DEFAULT_TOWER_RULES = [
+  "Everyone plays as one team.",
+  "Take turns: one person places one paper cup at a time.",
+  "Build the tallest tower you can in the time.",
+  "Each level of the tower that is still standing at the end counts.",
 ].join("\n");
+export const DEFAULT_SEMANTLE_PUZZLES = "1700, 1650, 1600, 1550, 1500, 1450, 1400, 1350, 1300, 1250";
 
 export function defaultRescue() {
-  return { title: "Rescue game", rules: DEFAULT_GAME_RULES, emergencyRule: "returnLastOut" };
+  return {
+    emergencyRule: "returnLastOut",
+    beat: { rate: 10, allAt: 4 },
+    doodle: { rate: 10, allAt: 7, rounds: 10, drawSeconds: 8, guessSeconds: 10 },
+    semantle: { minutes: 5, puzzles: DEFAULT_SEMANTLE_PUZZLES, lowAt: 900, lowPct: 20, highAt: 990, highPct: 50 },
+    tower: { title: "Control tower", rules: DEFAULT_TOWER_RULES, seconds: 90, rate: 10, allAt: 7 },
+  };
 }
 
 export function normalizeRescue(r = {}) {
   const d = defaultRescue();
+  const int = (v, lo, hi, dflt) => Math.round(num(v, lo, hi, dflt));
+  const rated = (x = {}, dd) => ({ rate: int(x.rate, 1, 100, dd.rate), allAt: int(x.allAt, 1, 99, dd.allAt) });
+  const b = r.beat || {}, o = r.doodle || {}, m = r.semantle || {}, t = r.tower || {};
+  const lowAt = int(m.lowAt, 1, 999, d.semantle.lowAt);
   return {
-    title: str(r.title, 80).trim() || d.title,
-    // Older saves kept a table of return rules under "rules"; only text counts now.
-    rules: typeof r.rules === "string" ? str(r.rules, 2000).trim() : d.rules,
     emergencyRule: EMERGENCY_RULES[r.emergencyRule] ? r.emergencyRule : d.emergencyRule,
+    beat: { ...rated(b, d.beat), allAt: int(b.allAt, 1, 5, d.beat.allAt) },
+    doodle: { ...rated(o, d.doodle), rounds: int(o.rounds, 3, 20, d.doodle.rounds), drawSeconds: num(o.drawSeconds, 2, 30, d.doodle.drawSeconds), guessSeconds: int(o.guessSeconds, 3, 60, d.doodle.guessSeconds) },
+    semantle: {
+      minutes: num(m.minutes, 1, 30, d.semantle.minutes),
+      puzzles: semantlePuzzles(m.puzzles ?? d.semantle.puzzles).join(", ") || d.semantle.puzzles,
+      lowAt, lowPct: int(m.lowPct, 1, 99, d.semantle.lowPct),
+      highAt: int(m.highAt, lowAt, 999, Math.max(lowAt, d.semantle.highAt)), highPct: int(m.highPct, 1, 99, d.semantle.highPct),
+    },
+    tower: {
+      ...rated(t, d.tower),
+      title: str(t.title, 80).trim() || d.tower.title,
+      rules: typeof t.rules === "string" ? str(t.rules, 2000).trim() : d.tower.rules,
+      seconds: int(t.seconds, 10, 600, d.tower.seconds),
+    },
   };
+}
+
+// Archive numbers typed by the host, e.g. "1700, 1650 1600".
+export const semantlePuzzles = (text) => [...new Set(String(text || "").split(/[^0-9]+/).filter(Boolean).map(Number).filter((n) => n > 0 && n < 100000))].slice(0, 50);
+
+// The team's score: rounds won (beat, doodle), Semantle closeness out of 1000, tower levels.
+export const rescueScore = (game) => (!game ? 0 : ["beat", "doodle"].includes(game.kind) ? game.results.filter(Boolean).length : game.score || 0);
+
+// Share of the eliminated contestants who come back, in percent.
+export function rescuePct(kind, score, cfg) {
+  if (kind === "semantle") {
+    const m = cfg.semantle;
+    return score >= 1000 ? 100 : score >= m.highAt ? m.highPct : score >= m.lowAt ? m.lowPct : 0;
+  }
+  const g = cfg[kind];
+  return score >= g.allAt ? 100 : Math.min(100, score * g.rate);
+}
+// How many of `out` eliminated contestants that is: rounded, at least one once anything is won.
+export const rescueCount = (pct, out) => (pct <= 0 || out <= 0 ? 0 : pct >= 100 ? out : Math.min(out, Math.max(1, Math.round((pct * out) / 100))));
+
+const UNIT = { beat: ["level", "levels"], doodle: ["country", "countries"], tower: ["level", "levels"] };
+// The score ladder shown before a game starts.
+export function rescueLadder(kind, cfg) {
+  if (kind === "semantle") {
+    const m = cfg.semantle;
+    return [`Closeness ${m.lowAt}+ → ${m.lowPct}% back`, `Closeness ${m.highAt}+ → ${m.highPct}% back`, "Find the word → everyone back"];
+  }
+  const g = cfg[kind], [one, many] = UNIT[kind], lines = [];
+  for (let n = 1; n < g.allAt; n++) if (n * g.rate < 100) lines.push(`${n} ${n === 1 ? one : many} → ${n * g.rate}% back`);
+  lines.push(`${g.allAt} ${g.allAt === 1 ? one : many} → everyone back`);
+  return lines;
+}
+
+export function rescueInfo(kind, cfg) {
+  switch (kind) {
+    case "beat": return { title: "Say it on the beat", howTo: ["Eight flags light up one at a time, on the beat.", "Say each country out loud, together, right on the beat.", "Five levels, each one faster. The last level has no names!"] };
+    case "doodle": return { title: "Guess the doodle", howTo: ["A country's outline draws itself on the screen.", `Shout the country before the ${cfg.doodle.guessSeconds}-second countdown runs out.`, `${cfg.doodle.rounds} countries. No guess in time and the plane moves on.`] };
+    case "semantle": return { title: "Semantle", howTo: [`Find the secret word in ${cfg.semantle.minutes} minutes.`, "Come up one at a time and type a single word.", "The closer the meaning, the higher the score out of 1000."] };
+    case "tower": return { title: cfg.tower.title, howTo: ruleLines(cfg.tower.rules) };
+    default: return { title: "Rescue game", howTo: [] };
+  }
 }
 
 // The rules as the projector lists them: one per non-empty line.

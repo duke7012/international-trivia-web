@@ -1,5 +1,5 @@
 // The show itself, independent of where it runs: applies host actions to the saved state, builds
-// what each screen may see, and lets the clock do its three permitted things.
+// what each screen may see, and lets the clock do its few permitted things.
 // The Node server and the Cloudflare Durable Object both wrap this same object.
 import { projectorView, hostView } from "./views.mjs";
 import { WORKSPACES, newId } from "./bank.mjs";
@@ -121,7 +121,7 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       return result;
     },
 
-    // The clock's only powers: land the plane and raise the boards.
+    // The clock's only powers: land the plane, raise the boards, and end a rescue round.
     // Returns true when something changed.
     tick() {
       const a = due(store.current.session, now());
@@ -134,6 +134,8 @@ export function createShow({ store, screens, extras = {}, now = () => Date.now()
       const s = store.current.session;
       if (s.phase === "FLIGHT_ANIMATING" && s.flight) return s.flight.startedAt + s.flight.durationMs;
       if (s.phase === "TIMER_RUNNING" && s.timer.running) return s.timer.deadline;
+      const g = s.phase === "RESCUE" && s.rescue?.game;
+      if (g && g.status === "playing" && g.deadline) return g.deadline;
       return null;
     },
 

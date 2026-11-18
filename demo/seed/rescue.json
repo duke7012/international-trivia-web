@@ -1,5 +1,29 @@
 {
- "title": "Paper plane relay",
- "rules": "Everyone who is out plays.\nFold a paper plane in 60 seconds.\nThrow it from behind the line.\nThe three longest flights get back on board.",
- "emergencyRule": "returnLastOut"
+ "emergencyRule": "returnLastOut",
+ "beat": {
+  "rate": 10,
+  "allAt": 4
+ },
+ "doodle": {
+  "rate": 10,
+  "allAt": 7,
+  "rounds": 10,
+  "drawSeconds": 8,
+  "guessSeconds": 10
+ },
+ "semantle": {
+  "minutes": 5,
+  "puzzles": "1700, 1650, 1600, 1550, 1500, 1450, 1400, 1350, 1300, 1250",
+  "lowAt": 900,
+  "lowPct": 20,
+  "highAt": 990,
+  "highPct": 50
+ },
+ "tower": {
+  "title": "Control tower",
+  "rules": "Everyone plays as one team.\nTake turns: one person places one paper cup at a time.\nBuild the tallest tower you can in the time.\nEach level of the tower that is still standing at the end counts.",
+  "seconds": 90,
+  "rate": 10,
+  "allAt": 7
+ }
 }

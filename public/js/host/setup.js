@@ -1,9 +1,10 @@
-// Rescue tab (the rescue game's name and rules, stored apart from the question bank) and Settings tab.
+// Rescue tab (how the four rescue games score, stored apart from the question bank) and Settings tab.
 // Both are re-created when the host switches between the live show and the demo set, so each
 // starts from that set's saved values.
 import { html, useRef, useState } from "/vendor/preact/htm-preact.module.js";
 import { upload, plural } from "../net.js";
-import { EMERGENCY_RULES, SOUND_CUES, cueForFile, ruleLines } from "/shared/schema.mjs";
+import { EMERGENCY_RULES, SOUND_CUES, cueForFile, ruleLines, rescueLadder, semantlePuzzles } from "/shared/schema.mjs";
+import { BEAT_SETS, DOODLES } from "/shared/rescue-bank.mjs";
 import { run, say, Field } from "./ui.js";
 
 
@@ -11,24 +12,40 @@ export function RescueTab({ view }) {
   const [r, setR] = useState(() => structuredClone(view.rescue));
   const [dirty, setDirty] = useState(false);
   const set = (patch) => { setR((x) => ({ ...x, ...patch })); setDirty(true); };
-  const save = async () => { if (await run("rescue.save", { rescue: r })) { setDirty(false); say("Rescue game saved.", "ok"); } };
-  const lines = ruleLines(r.rules);
+  const setG = (kind, patch) => { setR((x) => ({ ...x, [kind]: { ...x[kind], ...patch } })); setDirty(true); };
+  const save = async () => { if (await run("rescue.save", { rescue: r })) { setDirty(false); say("Rescue games saved.", "ok"); } };
+  const n = (kind, key, label, attrs = {}) => html`<${Field} label=${label}><input type="number" class="narrow" value=${r[kind][key]} onInput=${(e) => setG(kind, { [key]: e.target.value })} data-testid=${`rescue-${kind}-${key}`} ...${attrs} /><//>`;
+  const rated = (kind, unit, units = unit + "s") => html`${n(kind, "rate", "% back per " + unit, { min: 1, max: 100 })}${n(kind, "allAt", `Everyone back at (${units})`, { min: 1 })}`;
+  const ladder = (kind) => { try { return rescueLadder(kind, r); } catch { return []; } };
+  const Ladder = ({ kind }) => html`<ul class="ladder-host">${ladder(kind).map((l) => html`<li>${l}</li>`)}</ul>`;
+  const lines = ruleLines(r.tower.rules);
   return html`<div class="setup">
     <section class="panel">
-      <header class="panel-head"><h2>MAYDAY! Save the flight! Rescue game</h2><span class="muted" data-testid="rules-count">${plural(lines.length, "rule")} on the projector</span></header>
-      <p class="muted">When every contestant has been eliminated, you can start the rescue game: everyone who is out plays a game in the room, and the projector shows these rules. When it is over, you tick who won their way back on board.</p>
-      <div class="grid2">
-        <div>
-          <${Field} label="Game name" hint="The big title on the projector"><input type="text" maxlength="80" value=${r.title} onInput=${(e) => set({ title: e.target.value })} data-testid="rescue-title" /><//>
-          <${Field} label="Rules" hint="One rule per line. Each line is numbered on the projector (up to 12)."><textarea rows="8" value=${r.rules} onInput=${(e) => set({ rules: e.target.value })} data-testid="rescue-rules" /><//>
-        </div>
-        <div class="rules-preview" data-testid="rules-preview">
-          <span class="field-label">On the projector</span>
-          <b>${r.title.trim() || "Rescue game"}</b>
-          <ol>${lines.map((l) => html`<li>${l}</li>`)}</ol>
-        </div>
-      </div>
+      <header class="panel-head"><h2>MAYDAY! Save the flight! Rescue games</h2></header>
+      <p class="muted">When every contestant has been eliminated, you can start a rescue. Everyone who is out plays one of these games as a team. Their score sets what share of them comes back, and you pick who. The flags, country shapes and Semantle puzzles are built in, and each rescue round uses ones not played yet.</p>
     </section>
+    <div class="rescue-games">
+      <section class="panel">
+        <header class="panel-head"><h2>Say it on the beat</h2><span class="muted">${BEAT_SETS.length} flag sets, 5 levels each</span></header>
+        <div class="grid3">${rated("beat", "level")}</div><${Ladder} kind="beat" />
+      </section>
+      <section class="panel">
+        <header class="panel-head"><h2>Guess the doodle</h2><span class="muted">${DOODLES.length} countries</span></header>
+        <div class="grid3">${rated("doodle", "country", "countries")}${n("doodle", "rounds", "Countries per game", { min: 3, max: 20 })}${n("doodle", "drawSeconds", "Drawing time (s)", { min: 2, max: 30, step: 0.5 })}${n("doodle", "guessSeconds", "Guessing time (s)", { min: 3, max: 60 })}</div><${Ladder} kind="doodle" />
+      </section>
+      <section class="panel">
+        <header class="panel-head"><h2>Semantle</h2><span class="muted">${plural(semantlePuzzles(r.semantle.puzzles).length, "puzzle")}</span></header>
+        <div class="grid3">${n("semantle", "minutes", "Minutes", { min: 1, max: 30 })}${n("semantle", "lowAt", "Closeness for the first step", { min: 1, max: 999 })}${n("semantle", "lowPct", "% back at that step", { min: 1, max: 99 })}<span></span>${n("semantle", "highAt", "Closeness for the second step", { min: 1, max: 999 })}${n("semantle", "highPct", "% back at that step", { min: 1, max: 99 })}</div>
+        <${Field} label="Archive puzzle numbers" hint="From semantle.com/archive, played in this order"><input type="text" value=${r.semantle.puzzles} onInput=${(e) => setG("semantle", { puzzles: e.target.value })} data-testid="rescue-semantle-puzzles" /><//>
+        <${Ladder} kind="semantle" />
+      </section>
+      <section class="panel">
+        <header class="panel-head"><h2>Physical game</h2><span class="muted">${plural(lines.length, "rule")} on the projector</span></header>
+        <${Field} label="Game name"><input type="text" maxlength="80" value=${r.tower.title} onInput=${(e) => setG("tower", { title: e.target.value })} data-testid="rescue-title" /><//>
+        <${Field} label="Rules" hint="One rule per line (up to 12)"><textarea rows="5" value=${r.tower.rules} onInput=${(e) => setG("tower", { rules: e.target.value })} data-testid="rescue-rules" /><//>
+        <div class="grid3">${n("tower", "seconds", "Time (s)", { min: 10, max: 600 })}${rated("tower", "level")}</div><${Ladder} kind="tower" />
+      </section>
+    </div>
 
     <section class="panel">
       <header class="panel-head"><h2>If nobody wins</h2></header>
@@ -37,7 +54,7 @@ export function RescueTab({ view }) {
       <//>
     </section>
 
-    <div class="savebar ${dirty ? "dirty" : ""}"><span>${dirty ? "You have unsaved rescue changes." : "Rescue game is saved."}</span><button type="button" class="btn primary" onClick=${save} disabled=${!dirty} data-testid="btn-save-rescue">Save rescue game</button></div>
+    <div class="savebar ${dirty ? "dirty" : ""}"><span>${dirty ? "You have unsaved rescue changes." : "Rescue games are saved."}</span><button type="button" class="btn primary" onClick=${save} disabled=${!dirty} data-testid="btn-save-rescue">Save rescue games</button></div>
   </div>`;
 }
 

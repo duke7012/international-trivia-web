@@ -2,7 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reduce, newSession, due, ShowError, active, eliminated, nextFixed, topicOptions, QUESTION_PHASES } from "../shared/engine.mjs";
-import { emptyQuestion, normalizeQuestion, publishErrors, defaultSettings, defaultRescue, normalizeRescue, ruleLines, TOTAL_STOPS } from "../shared/schema.mjs";
+import { emptyQuestion, normalizeQuestion, publishErrors, defaultSettings, defaultRescue, normalizeRescue, ruleLines, rescuePct, rescueCount, rescueLadder, TOTAL_STOPS } from "../shared/schema.mjs";
+import { DOODLES } from "../shared/rescue-bank.mjs";
 
 let seq = 0;
 const q = (over = {}) => ({
@@ -143,27 +144,101 @@ test("the rescue game is started by the host and never ends by itself", () => {
   const ctx = makeCtx();
   const s = run(knockOutAll(roster(ctx, "A", "B", "C"), ctx), ctx, "startRescue");
   assert.equal(s.phase, "RESCUE");
-  assert.deepEqual(s.rescue, { attempt: 1 });
-  assert.equal(due(s, 9e9), null, "the game has no clock of its own");
+  assert.deepEqual(s.rescue, { attempt: 1, game: null });
+  assert.equal(due(s, 9e9), null, "nothing runs until the host picks and starts a game");
   assert.equal(eliminated(s).length, 3, "nobody returns until the host picks the winners");
   assert.throws(() => run(s, ctx, "fly"), ShowError);
+  assert.throws(() => run(s, ctx, "rescueGo"), /Choose a rescue game/);
 });
 
-test("the host returns the winners, and the journey skips the question that caused the wipe-out", () => {
+// Plays a whole beat game: one ok/miss per level.
+const playBeat = (s, ctx, marks) => {
+  s = run(s, ctx, ["rescuePick", { kind: "beat" }]);
+  for (const ok of marks) s = run(s, ctx, "rescueGo", ["rescueMark", { ok }], "rescueNext");
+  return s;
+};
+
+test("the team's score sets how many may return: 2 of 5 levels is 20%, the threshold brings everyone back", () => {
+  const cfg = defaultRescue();
+  assert.equal(rescuePct("beat", 2, cfg), 20);
+  assert.equal(rescuePct("beat", 4, cfg), 100);
+  assert.equal(rescuePct("tower", 0, cfg), 0);
+  assert.equal(rescuePct("semantle", 899, cfg), 0);
+  assert.equal(rescuePct("semantle", 950, cfg), 20);
+  assert.equal(rescuePct("semantle", 995, cfg), 50);
+  assert.equal(rescuePct("semantle", 1000, cfg), 100);
+  assert.equal(rescueCount(20, 5), 1);
+  assert.equal(rescueCount(10, 3), 1, "anything won brings back at least one");
+  assert.equal(rescueCount(0, 5), 0);
+  assert.equal(rescueCount(100, 5), 5);
+
   const ctx = makeCtx();
-  let s = run(knockOutAll(roster(ctx, "A", "B", "C", "D"), ctx), ctx, "startRescue");
+  let s = playBeat(run(knockOutAll(roster(ctx, "A", "B", "C", "D", "E"), ctx), ctx, "startRescue"), ctx, [true, false, true, false, false]);
+  assert.equal(s.rescue.game.status, "done");
   const ids = s.contestants.map((c) => c.id);
-  assert.throws(() => run(s, ctx, ["rescueApply", { ids: [] }]), /Pick who won/);
+  assert.throws(() => run(s, ctx, ["rescueApply", { ids: ids.slice(0, 2) }]), /earned 1 place/);
   assert.throws(() => run(s, ctx, ["rescueApply", { ids: ["nobody"] }]), /Only eliminated/);
-  s = run(s, ctx, ["rescueApply", { ids: ids.slice(0, 2) }]);
+  s = run(s, ctx, ["rescueApply", { ids: [ids[3]] }]);
   assert.equal(s.phase, "READY_TO_FLY");
-  assert.deepEqual(active(s).map((c) => c.id), ids.slice(0, 2));
-  assert.deepEqual(s.lastRescue.returnedIds, ids.slice(0, 2));
+  assert.deepEqual(active(s).map((c) => c.name), ["D"]);
   assert.equal(s.lastRescue.via, "rescue");
   const firstQuestion = s.played[0].questionId;
   s = run(s, ctx, "fly");
-  assert.equal(s.stop, 2);
+  assert.equal(s.stop, 2, "the journey skips the question that caused the wipe-out");
   assert.notEqual(s.currentQuestionId, firstQuestion);
+});
+
+test("nobody can return before the game is over, or when the team scored nothing", () => {
+  const ctx = makeCtx();
+  let s = run(knockOutAll(roster(ctx, "A", "B"), ctx), ctx, "startRescue", ["rescuePick", { kind: "tower" }], "rescueGo");
+  const ids = s.contestants.map((c) => c.id);
+  assert.throws(() => run(s, ctx, ["rescueApply", { ids }]), /Finish the game/);
+  assert.throws(() => run(s, ctx, ["rescueScore", { score: -1 }]), ShowError);
+  const zero = run(s, ctx, ["rescueScore", { score: 0 }]);
+  assert.throws(() => run(zero, ctx, ["rescueApply", { ids }]), /did not score enough/);
+  s = run(s, ctx, ["rescueScore", { score: 7 }]);
+  assert.equal(run(s, ctx, ["rescueApply", { ids }]).phase, "READY_TO_FLY", "7 tower levels bring everyone back");
+});
+
+test("a doodle nobody guesses in time is skipped as a miss; timed games stop and wait for the score", () => {
+  const ctx = makeCtx();
+  let s = run(knockOutAll(roster(ctx, "A", "B"), ctx), ctx, "startRescue", ["rescuePick", { kind: "doodle" }]);
+  assert.equal(s.rescue.game.items.length, 10);
+  assert.deepEqual(s.rescue.game.items.slice(0, 4).map((c) => DOODLES.find((d) => d.iso3 === c.iso3).level), ["easy", "easy", "easy", "easy"]);
+  s = run(s, ctx, "rescueGo");
+  const end = s.rescue.game.deadline;
+  assert.equal(end, ctx.now + 18000, "8 s of drawing and 10 s to guess");
+  assert.equal(due(s, end - 1), null);
+  assert.deepEqual(due(s, end), { type: "rescueTimeout" });
+  s = run(s, ctx, "rescueTimeout");
+  assert.deepEqual(s.rescue.game.results, [false]);
+  assert.equal(s.rescue.game.status, "marked");
+  assert.equal(due(s, 9e9), null);
+
+  let t = run(knockOutAll(roster(ctx, "A"), ctx), ctx, "startRescue", ["rescuePick", { kind: "semantle" }], "rescueGo");
+  assert.equal(t.rescue.game.items.puzzle, 1700);
+  assert.equal(t.rescue.game.deadline, ctx.now + 5 * 60000);
+  t = run(t, ctx, "rescueTimeout");
+  assert.equal(t.rescue.game.status, "timeUp");
+  assert.equal(run(t, ctx, ["rescueScore", { score: 1000 }]).rescue.game.status, "done");
+});
+
+test("a second rescue round plays fresh flags, countries and puzzles", () => {
+  const ctx = makeCtx();
+  const out = knockOutAll(roster(ctx, "A"), ctx);
+  const first = run(out, ctx, "startRescue", ["rescuePick", { kind: "doodle" }], "rescueGo", "rescueAbort");
+  const second = run(first, ctx, "startRescue", ["rescuePick", { kind: "doodle" }]);
+  const a = new Set(first.rescueUsed.doodle);
+  assert.equal(a.size, 10);
+  assert.ok(second.rescue.game.items.every((c) => !a.has(c.iso3)), "no country repeats");
+  const b1 = run(second, ctx, "rescueAbort", "startRescue", ["rescuePick", { kind: "beat" }], "rescueGo", "rescueAbort");
+  const b2 = run(b1, ctx, "startRescue", ["rescuePick", { kind: "beat" }]);
+  assert.notEqual(b2.rescue.game.items.set, b1.rescueUsed.beat[0]);
+  assert.equal(b2.rescue.game.items.levels.length, 5);
+  assert.ok(b2.rescue.game.items.levels[4].every((f) => f.hidden), "the last level shows no names");
+  // A game only counts as used once it starts: picking and swapping spends nothing.
+  const swap = run(out, ctx, "startRescue", ["rescuePick", { kind: "semantle" }], ["rescuePick", { kind: "beat" }]);
+  assert.deepEqual(swap.rescueUsed, { beat: [], doodle: [], semantle: [] });
 });
 
 test("leaving the rescue game goes back to the emergency screen; a second game counts as round 2", () => {
@@ -185,12 +260,15 @@ test("emergency exits work from the emergency screen and during the rescue game,
   assert.equal(active(rule).length, 2);
 });
 
-test("rescue content: a title and one rule per line; older clue-based saves fall back to the defaults", () => {
+test("rescue settings: older rule-list saves fall back to the defaults; Semantle numbers are cleaned up", () => {
   assert.deepEqual(ruleLines("  Run to the wall \n\n Touch it\n"), ["Run to the wall", "Touch it"]);
-  const old = normalizeRescue({ clues: [{ prompt: "x", answer: "y" }], timerSec: 90, rules: { 3: { type: "all" } }, emergencyRule: "returnAll" });
+  const old = normalizeRescue({ title: "Paper planes", rules: "Hop", emergencyRule: "returnAll" });
   assert.deepEqual(old, { ...defaultRescue(), emergencyRule: "returnAll" });
-  assert.equal(normalizeRescue({ title: "  ", rules: "Hop" }).title, defaultRescue().title);
-  assert.equal(normalizeRescue({ title: "Musical chairs", rules: "Hop" }).rules, "Hop");
+  const r = normalizeRescue({ semantle: { puzzles: "1700,  1650 x 1700, 0" }, beat: { rate: "25", allAt: 9 } });
+  assert.equal(r.semantle.puzzles, "1700, 1650");
+  assert.equal(r.beat.rate, 25);
+  assert.equal(r.beat.allAt, 5, "beat has only five levels");
+  assert.deepEqual(rescueLadder("beat", defaultRescue()), ["1 level → 10% back", "2 levels → 20% back", "3 levels → 30% back", "4 levels → everyone back"]);
 });
 
 test("topic choice draws an unused published question of the stop's difficulty, and explains why a topic is closed", () => {
@@ -359,6 +437,8 @@ test("which sound plays when", () => {
   const rescue = planAudio(v({ phase: "RESCUE", rescue: { attempt: 1 } }), 0);
   assert.deepEqual(rescue.steps, [{ cue: "rescueGame", loop: true }], "music loops through the rescue game");
   assert.notEqual(planAudio(v({ phase: "RESCUE", rescue: { attempt: 2 } }), 0).key, rescue.key, "a second game starts the music again");
+  assert.equal(planAudio(v({ phase: "RESCUE", rescue: { attempt: 1, kind: "beat", status: "playing" } }), 0), null, "the beat game's own beat plays alone");
+  assert.ok(planAudio(v({ phase: "RESCUE", rescue: { attempt: 1, kind: "beat", status: "marked" } }), 0));
   assert.deepEqual(planAudio(v({ phase: "FINISHED" }), 0).steps, [{ cue: "finale", loop: true }], "music loops through the finale");
 
   // with only some files supplied, only those play
