@@ -226,10 +226,11 @@ export const EMERGENCY_RULES = {
 // what share of them comes back on board; the host then picks who, up to that number.
 export const RESCUE_KINDS = ["beat", "doodle", "semantle", "tower"];
 export const DEFAULT_TOWER_RULES = [
-  "Everyone plays as one team.",
-  "Take turns: one person places one paper cup at a time.",
-  "Build the tallest tower you can in the time.",
-  "Each level of the tower that is still standing at the end counts.",
+  "Split into two lines. Each line runs three checkpoints.",
+  "Checkpoint 1: roll the dice, take that many blocks, and throw them into a cup across the room.",
+  "Checkpoint 2: carry the cup of blocks on your head to the builders. Drop it, and go back to the start.",
+  "Checkpoint 3: build the tower the host shows, using only the blocks delivered.",
+  "Each group takes its own turn on the clock. Every finished tower counts.",
 ].join("\n");
 export const DEFAULT_SEMANTLE_PUZZLES = "1700, 1650, 1600, 1550, 1500, 1450, 1400, 1350, 1300, 1250";
 
@@ -240,7 +241,9 @@ export function defaultRescue() {
     doodle: { rate: 10, allAt: 7, rounds: 10, drawSeconds: 8, guessSeconds: 10 },
     // every `every` points of closeness adds `rate`%; closeness 1000 is finding the word
     semantle: { minutes: 5, puzzles: DEFAULT_SEMANTLE_PUZZLES, every: 100, rate: 5, allAt: 1000 },
-    tower: { title: "Control tower", rules: DEFAULT_TOWER_RULES, seconds: 90, rate: 10, allAt: 7 },
+    // a relay: the eliminated play in groups of `groupSize`, one group at a time, `seconds` each;
+    // the score is towers finished across all groups
+    tower: { title: "Tower relay", rules: DEFAULT_TOWER_RULES, seconds: 300, groupSize: 6, rate: 20, allAt: 5 },
   };
 }
 
@@ -262,7 +265,8 @@ export function normalizeRescue(r = {}) {
       ...rated(t, d.tower),
       title: str(t.title, 80).trim() || d.tower.title,
       rules: typeof t.rules === "string" ? str(t.rules, 2000).trim() : d.tower.rules,
-      seconds: int(t.seconds, 10, 600, d.tower.seconds),
+      seconds: int(t.seconds, 10, 1800, d.tower.seconds),
+      groupSize: int(t.groupSize, 1, 50, d.tower.groupSize),
     },
   };
 }
@@ -282,7 +286,7 @@ export function rescuePct(kind, score, cfg) {
 // How many of `out` eliminated contestants that is: rounded, at least one once anything is won.
 export const rescueCount = (pct, out) => (pct <= 0 || out <= 0 ? 0 : pct >= 100 ? out : Math.min(out, Math.max(1, Math.round((pct * out) / 100))));
 
-const UNIT = { beat: ["level", "levels"], doodle: ["country", "countries"], tower: ["level", "levels"] };
+const UNIT = { beat: ["level", "levels"], doodle: ["country", "countries"], tower: ["tower", "towers"] };
 // The score ladder shown before a game starts.
 export function rescueLadder(kind, cfg) {
   if (kind === "semantle") {

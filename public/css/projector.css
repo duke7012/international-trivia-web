@@ -155,6 +155,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); 
 /* control tower: the rules and a big clock */
 .tower { flex: 1; display: flex; align-items: center; gap: 4em; }
 .tower .game-rules { flex: 1; margin: 0; }
+.tower-clock { flex: 0 0 38em; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: .4em; text-align: center; }
+.tower-clock .rg-clock.low { font-size: 7em; white-space: nowrap; }
+.tower-group { font-size: 3em; font-weight: 800; letter-spacing: -.03em; margin: 0; }
+.tower-next { font-size: 2.4em; font-weight: 600; margin: 0; color: var(--gold); }
 
 /* finale */
 .finale { position: absolute; left: 9em; right: 44em; bottom: 7em; color: var(--ink); animation: rise 1s var(--ease) both; }

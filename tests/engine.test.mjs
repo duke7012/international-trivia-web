@@ -200,7 +200,7 @@ test("nobody can return before the game is over, or when the team scored nothing
   const zero = run(s, ctx, ["rescueScore", { score: 0 }]);
   assert.throws(() => run(zero, ctx, ["rescueApply", { ids }]), /did not score enough/);
   s = run(s, ctx, ["rescueScore", { score: 7 }]);
-  assert.equal(run(s, ctx, ["rescueApply", { ids }]).phase, "READY_TO_FLY", "7 tower levels bring everyone back");
+  assert.equal(run(s, ctx, ["rescueApply", { ids }]).phase, "READY_TO_FLY", "7 finished towers bring everyone back");
 });
 
 test("a doodle nobody guesses in time is skipped as a miss; timed games stop and wait for the score", () => {
@@ -478,4 +478,21 @@ test("the next doodle stays hidden on the projector until Draw country", () => {
   s = run(s, ctx, "rescueNext");
   assert.equal(s.rescue.game.status, "ready");
   assert.ok(!screen(s).outline && !screen(s).answer, "waiting for Draw country: nothing about the next country");
+});
+
+test("the tower relay gives each group of 6 its own clock, and finished towers add up", () => {
+  const names = Array.from({ length: 14 }, (_, i) => `P${i}`);
+  const ctx = makeCtx();
+  let s = run(knockOutAll(roster(ctx, ...names), ctx), ctx, "startRescue", ["rescuePick", { kind: "tower" }]);
+  assert.equal(s.rescue.game.items.groups, 3, "14 out in groups of 6");
+  s = run(s, ctx, "rescueGo");
+  assert.equal(s.rescue.game.deadline, ctx.now + 300000, "5 minutes a group");
+  assert.throws(() => run(s, ctx, "rescueGo"), /already playing/);
+  s = run(s, ctx, "rescueTimeout", "rescueGo");
+  assert.deepEqual([s.rescue.game.round, s.rescue.game.status], [1, "playing"], "group 2 starts on its own clock");
+  s = run(s, ctx, "rescueTimeout", "rescueGo", "rescueTimeout");
+  assert.throws(() => run(s, ctx, "rescueGo"), /Every group/);
+  s = run(s, ctx, ["rescueScore", { score: 3 }]);
+  assert.equal(rescuePct("tower", 3, ctx.rescue), 60, "20% a tower");
+  assert.equal(rescuePct("tower", 5, ctx.rescue), 100, "5 towers save everyone");
 });
