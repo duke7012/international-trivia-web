@@ -25,9 +25,12 @@ export function createCuePlayer() {
     for (const id of [...players.keys()]) if (!cues?.[id]) { players.get(id).el.pause(); players.delete(id); }
   }
 
+  // A fade belongs to one stretch: if the same file starts again before it ends (a level played
+  // again), the new start cancels it instead of being paused by it.
   function fadeOut(el) {
-    const from = el.volume, t0 = performance.now();
+    const from = el.volume, t0 = performance.now(), id = (el.fading = {});
     const step = () => {
+      if (el.fading !== id) return;
       const k = (performance.now() - t0) / FADE_MS;
       if (k >= 1) { el.pause(); el.volume = volume; return; }
       el.volume = from * (1 - k); requestAnimationFrame(step);
@@ -46,7 +49,7 @@ export function createCuePlayer() {
       let offset = s.at != null ? Math.max(0, (clock.now() - s.at) / 1000) : 0;
       if (s.loop && el.duration > 0) offset %= el.duration;
       else if (!s.loop && el.duration > 0 && offset >= el.duration - 0.05) continue; // already over
-      el.loop = !!s.loop; el.volume = volume;
+      el.fading = null; el.loop = !!s.loop; el.volume = volume;
       try { el.currentTime = offset > 0.25 ? offset : 0; } catch { /* not loaded yet: start from the top */ }
       el.onended = () => { el.onended = null; run.i++; playStep(run, false); note(); };
       run.el = el;

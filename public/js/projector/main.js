@@ -3,6 +3,7 @@
 import { html, render, useEffect, useRef, useState } from "/vendor/preact/htm-preact.module.js";
 import { connect, clock, plural } from "../net.js";
 import { createWorld, ZONES, zoneOf, STOPS } from "./world.js";
+import { BEAT_STEPS, BEAT_ROUNDS } from "/shared/rescue-bank.mjs";
 import { QuestionCard } from "../stage.js";
 import { sfx, play } from "./sfx.js";
 import { createCuePlayer } from "./cues.js";
@@ -44,12 +45,12 @@ function sounds(prev, v) {
   if (v.rescue && prev.rescue?.attempt !== v.rescue.attempt && !own("rescueGame")) play.mayday();
   const r = v.rescue, pr = prev.rescue;
   if (r?.kind && pr?.kind === r.kind && pr.attempt === r.attempt) {
-    if (r.kind === "beat" && r.status === "playing" && pr.startedAt !== r.startedAt) {
-      // count-in, then one beat per flag, then a closing hit, all timed from the server's start
-      const ms = beatMs(r.bpm);
-      for (let i = 0; i <= COUNT_IN + r.flags.length; i++) {
-        const t = (r.startedAt + i * ms - clock.now()) / 1000;
-        if (t > -0.03) play.beat(Math.max(0, t), i < COUNT_IN ? "count" : i === COUNT_IN + r.flags.length ? "end" : "flag", ms / 1000);
+    if (r.kind === "beat" && r.status === "playing" && pr.startedAt !== r.startedAt && !own("beatTrack")) {
+      // No beat music loaded: a built-in beat on the same steps (soft while looking, full while saying).
+      const { stepMs, leadMs } = r.track;
+      for (let k = 0; k <= BEAT_STEPS; k++) {
+        const t = (r.startedAt + leadMs + k * stepMs - clock.now()) / 1000;
+        if (t > -0.03) play.beat(Math.max(0, t), k === BEAT_STEPS ? "end" : k % 16 < 8 ? "count" : "flag", stepMs / 1000);
       }
     }
     if (r.status === "marked" && pr.status === "playing") (r.results[r.round] ? play.right : play.wrong)();
@@ -175,22 +176,30 @@ const useNow = (ms, on = true) => {
   return on ? t : clock.now();
 };
 const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-const COUNT_IN = 4;
-const beatMs = (bpm) => 60000 / bpm;
 
 function Countdown({ deadline, big }) {
   const now = useNow(200, !!deadline);
   return html`<p class="rg-clock ${big ? "big" : ""} ${deadline && deadline - now < 10500 ? "low" : ""}" data-testid="rescue-clock">${deadline ? mmss(deadline - now) : "0:00"}</p>`;
 }
 
+// Say on the beat, timed from the level's start: a title while the intro plays, then five rounds of
+// 16 steps each, 8 to look at the grid (round 1 pops in flag by flag) and 8 to say them on the beat.
 function Beat({ r }) {
-  const playing = r.status === "playing";
-  const now = useNow(25, playing);
-  const n = playing ? Math.floor((now - r.startedAt) / beatMs(r.bpm)) - COUNT_IN : -99;
-  const count = playing && n < 0 && n >= -COUNT_IN ? n + COUNT_IN + 1 : null;
-  return html`<div class="beat" data-testid="beat-grid">
-    <div class="beat-grid">${r.flags.map((f, i) => html`<figure class="${i === n ? "lit" : ""} ${playing && i < n ? "said" : ""}"><img src=${f.src} alt="" draggable="false" />${f.name && html`<figcaption>${f.name}</figcaption>`}</figure>`)}</div>
-    <p class="beat-cue">${count ? html`<b class="count" key=${count}>${count}</b>` : playing && n >= r.flags.length ? "Level over" : !playing ? `Level ${r.round + 1} · ${r.bpm} beats a minute${r.flags[0].name ? "" : " · no names!"}` : ""}</p>
+  const playing = r.status === "playing", t = r.track;
+  const now = useNow(20, playing);
+  const k = playing ? Math.floor((now - r.startedAt - t.leadMs) / t.stepMs) : -1;
+  const title = html`<div class="beat-title" key="title"><p>${r.level}</p><span>Level ${r.round + 1} of ${r.rounds}</span></div>`;
+  if (!playing || k < 0) return html`<div class="beat" data-testid="beat-grid" data-step=${k}>${title}</div>`;
+  const over = k >= BEAT_STEPS;
+  const round = Math.min(BEAT_ROUNDS - 1, Math.floor(k / 16)), s = over ? 16 : k % 16;
+  const grid = r.grids[round], lit = s >= 8 ? s - 8 : -1;
+  return html`<div class="beat" data-testid="beat-grid" data-step=${k}>
+    <p class="beat-round">${round + 1}/${BEAT_ROUNDS}</p>
+    <div class="beat-grid" key=${round}>${grid.map((f, i) => {
+      const shown = round > 0 || s >= 8 || i <= s;
+      return html`<figure class="${shown ? "in" : "out"} ${i === lit ? "lit" : ""}"><img src=${f.src} alt="" draggable="false" /><figcaption>${f.name || "?"}</figcaption></figure>`;
+    })}</div>
+    <p class="beat-cue">${over ? "Level over" : s < 8 ? (grid[0].name ? "Look…" : "Look… no names this time!") : "Say it!"}</p>
   </div>`;
 }
 

@@ -159,10 +159,10 @@ const playBeat = (s, ctx, marks) => {
   return s;
 };
 
-test("the team's score sets how many may return: 2 of 5 levels is 20%, the threshold brings everyone back", () => {
+test("the team's score sets how many may return: 1 of 3 levels is 30%, the threshold brings everyone back", () => {
   const cfg = defaultRescue();
-  assert.equal(rescuePct("beat", 2, cfg), 20);
-  assert.equal(rescuePct("beat", 4, cfg), 100);
+  assert.equal(rescuePct("beat", 1, cfg), 30);
+  assert.equal(rescuePct("beat", 3, cfg), 100);
   assert.equal(rescuePct("tower", 0, cfg), 0);
   assert.equal(rescuePct("semantle", 99, cfg), 0);
   assert.equal(rescuePct("semantle", 450, cfg), 20, "every 100 closeness adds 5%");
@@ -176,10 +176,10 @@ test("the team's score sets how many may return: 2 of 5 levels is 20%, the thres
   assert.equal(rescueCount(100, 5), 5);
 
   const ctx = makeCtx();
-  let s = playBeat(run(knockOutAll(roster(ctx, "A", "B", "C", "D", "E"), ctx), ctx, "startRescue"), ctx, [true, false, true, false, false]);
+  let s = playBeat(run(knockOutAll(roster(ctx, "A", "B", "C", "D", "E"), ctx), ctx, "startRescue"), ctx, [false, true, false]);
   assert.equal(s.rescue.game.status, "done");
   const ids = s.contestants.map((c) => c.id);
-  assert.throws(() => run(s, ctx, ["rescueApply", { ids: ids.slice(0, 2) }]), /earned 1 place/);
+  assert.throws(() => run(s, ctx, ["rescueApply", { ids: ids.slice(0, 3) }]), /earned 2 places/, "30% of 5 is 2");
   assert.throws(() => run(s, ctx, ["rescueApply", { ids: ["nobody"] }]), /Only eliminated/);
   s = run(s, ctx, ["rescueApply", { ids: [ids[3]] }]);
   assert.equal(s.phase, "READY_TO_FLY");
@@ -237,8 +237,11 @@ test("a second rescue round plays fresh flags, countries and puzzles", () => {
   const b1 = run(second, ctx, "rescueAbort", "startRescue", ["rescuePick", { kind: "beat" }], "rescueGo", "rescueAbort");
   const b2 = run(b1, ctx, "startRescue", ["rescuePick", { kind: "beat" }]);
   assert.notEqual(b2.rescue.game.items.set, b1.rescueUsed.beat[0]);
-  assert.equal(b2.rescue.game.items.levels.length, 5);
-  assert.ok(b2.rescue.game.items.levels[4].every((f) => f.hidden), "the last level shows no names");
+  const levels = b2.rescue.game.items.levels;
+  assert.deepEqual(levels.map((l) => l.length), [5, 5, 5], "three levels of five rounds");
+  assert.ok(levels.every((l) => l.every((round) => round.length === 8)));
+  assert.ok(levels.every((l) => l[4].every((f) => f.hidden) && l.slice(0, 4).flat().every((f) => !f.hidden)), "round 5 of every level shows no names");
+  assert.ok(levels.every((l) => new Set(l.flat().map((f) => f.iso2)).size <= 3), "each level uses only its look-alikes");
   // A game only counts as used once it starts: picking and swapping spends nothing.
   const swap = run(out, ctx, "startRescue", ["rescuePick", { kind: "semantle" }], ["rescuePick", { kind: "beat" }]);
   assert.deepEqual(swap.rescueUsed, { beat: [], doodle: [], semantle: [] });
@@ -270,8 +273,8 @@ test("rescue settings: older rule-list saves fall back to the defaults; Semantle
   const r = normalizeRescue({ semantle: { puzzles: "1700,  1650 x 1700, 0" }, beat: { rate: "25", allAt: 9 } });
   assert.equal(r.semantle.puzzles, "1700, 1650");
   assert.equal(r.beat.rate, 25);
-  assert.equal(r.beat.allAt, 5, "beat has only five levels");
-  assert.deepEqual(rescueLadder("beat", defaultRescue()), ["1 level → 10% back", "2 levels → 20% back", "3 levels → 30% back", "4 levels → everyone back"]);
+  assert.equal(r.beat.allAt, 3, "beat has only three levels");
+  assert.deepEqual(rescueLadder("beat", defaultRescue()), ["1 level → 30% back", "2 levels → 60% back", "3 levels → everyone back"]);
 });
 
 test("topic choice draws an unused published question of the stop's difficulty, and explains why a topic is closed", () => {
@@ -368,6 +371,7 @@ test("the user's file names are matched to the right moments", () => {
     "goldenbell_game_contestant_elimination.mp3": "elimination",
     "rescue_game_music.mp3": "rescueGame",
     "finale_music.mp3": "finale",
+    "say_the_word_on_beat.m4a": "beatTrack",
   };
   for (const [name, id] of Object.entries(files)) assert.equal(cueForFile(name), id, name);
   assert.equal(new Set(Object.values(files)).size, SOUND_CUES.length, "every moment has a file");
@@ -445,6 +449,9 @@ test("which sound plays when", () => {
   assert.notEqual(planAudio(v({ phase: "RESCUE", rescue: { attempt: 2 } }), 0).key, rescue.key, "a second game starts the music again");
   assert.equal(planAudio(v({ phase: "RESCUE", rescue: { attempt: 1, kind: "beat", status: "playing" } }), 0), null, "the beat game's own beat plays alone");
   assert.ok(planAudio(v({ phase: "RESCUE", rescue: { attempt: 1, kind: "beat", status: "marked" } }), 0));
+  const level2 = v({ phase: "RESCUE", rescue: { attempt: 1, kind: "beat", status: "playing", startedAt: 100000, track: { stepMs: 364.25, leadMs: 2000, fileAt: 36.981 } } });
+  assert.deepEqual(planAudio(level2, 100500).steps, [{ cue: "beatTrack", at: 100000 + 2000 - 36981 }], "level 2 plays from its own place in the track");
+  assert.equal(planAudio(level2, 100000 + 2000 + 80 * 364.25 + 900), null, "and stops after the level's 80 steps");
   assert.deepEqual(planAudio(v({ phase: "FINISHED" }), 0).steps, [{ cue: "finale", loop: true }], "music loops through the finale");
 
   // with only some files supplied, only those play

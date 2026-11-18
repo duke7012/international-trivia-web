@@ -10,6 +10,7 @@
 //                  saw the moment happen, never replayed after a refresh
 //   hold   pause without losing the place (timer paused, or a question's own clip is playing)
 import { LATE_STAGE_STOP } from "./schema.mjs";
+import { BEAT_STEPS } from "./rescue-bank.mjs";
 
 export function planAudio(v, now) {
   if (!v) return null;
@@ -44,8 +45,13 @@ export function planAudio(v, now) {
     case "ELIMINATION_REVIEW":
       return plan(`elimination:${v.stop}`, [{ cue: "elimination", loop: true }]);
     case "RESCUE":
-      // The beat game brings its own beat; the music would only fight it.
-      if (v.rescue?.kind === "beat" && v.rescue.status === "playing") return null;
+      // A Say on the beat level plays its own stretch of the beat music, timed from the level's
+      // start (so a late projector joins in step), and nothing once the level's steps are over.
+      if (v.rescue?.kind === "beat" && v.rescue.status === "playing") {
+        const r = v.rescue, t = r.track;
+        if (!t || now > r.startedAt + t.leadMs + BEAT_STEPS * t.stepMs + 800) return null;
+        return plan(`beat:${r.startedAt}`, [{ cue: "beatTrack", at: r.startedAt + t.leadMs - t.fileAt * 1000 }]);
+      }
       return plan(`rescue:${v.rescue?.attempt}`, [{ cue: "rescueGame", loop: true }]);
     case "FINISHED":
       return plan(`finale:${v.stop}`, [{ cue: "finale", loop: true }]);

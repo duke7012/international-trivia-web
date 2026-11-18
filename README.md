@@ -220,7 +220,8 @@ live show and the demo rehearsal, and play on the projector.
 | Correct answer appears | Plays as the answer appears | `correct_answer` |
 | After the correct answer | Plays straight after the one above | `congratulations` |
 | Checking eliminations | Loops while you mark who is out | `contestant_elimination` |
-| Rescue game | Loops while the rescue game is on the projector (it pauses during the beat game's own beat) | `rescue` or `mayday` |
+| Rescue game | Loops while the rescue game is on the projector (it pauses while a Say on the beat level plays) | `rescue` or `mayday` |
+| Say on the beat music | Plays under each Say on the beat level, cut from the original flag-video track (without it, a built-in beat plays) | `say_the_word` or `on_beat` |
 | Finale | Loops while the finale is on the projector | `finale` |
 
 The two lead-ins change the timing on purpose: the host still presses Start timer and Reveal
@@ -238,7 +239,7 @@ Everyone who is out plays **one game as a team**, and the team's score sets how 
 
 | Game | How it plays | Score |
 |---|---|---|
-| **Say it on the beat** | Eight flags light up one per beat; the team says each country on the beat. Five levels, each faster; the last one has no names. | levels passed |
+| **Say it on the beat** | Like the "say the word on beat" flag videos: three levels (easy, medium, hard), each five rounds of eight look-alike flags. Each round is 8 steps to look and 8 steps where a green box moves on the beat and the team says each country. Round 5 of every level has no names. | levels passed |
 | **Guess the doodle** | A country's outline draws itself, then a 10-second countdown. No guess in time and it skips. | countries guessed |
 | **Semantle** | An archived [semantle.com](https://semantle.com/archive) puzzle fills the projector for 5 minutes; contestants come up and type. | best closeness out of 1000 |
 | **Physical game** | Your own game (by default the *Tower relay*: dice, a cup carried on the head, and building the tower the host shows) with its rules on screen. Everyone out plays in groups of 6, each with its own 5-minute clock. | towers finished, all groups |

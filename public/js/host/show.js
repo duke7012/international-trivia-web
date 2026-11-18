@@ -5,7 +5,7 @@ import { html, useEffect, useState } from "/vendor/preact/htm-preact.module.js";
 import { plural } from "../net.js";
 import { useRemaining } from "../stage.js";
 import { PRESENTATION_LABEL, FORMAT_LABEL, answerText, EMERGENCY_RULES, RESCUE_KINDS, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount, showRules } from "/shared/schema.mjs";
-import { semantleUrl } from "/shared/rescue-bank.mjs";
+import { semantleUrl, BEAT_LEVEL_NAMES } from "/shared/rescue-bank.mjs";
 import { run, excerpt, PHASE_TEXT, MediaControls } from "./ui.js";
 
 const secs = (ms) => Math.ceil(ms / 1000 - 0.001);
@@ -190,10 +190,10 @@ function RescueGame({ g, cfg }) {
     <button type="button" class="btn warn" onClick=${() => run("rescueMark", { ok: false })} data-testid="btn-rescue-miss">✗ Missed</button></div>`;
   const next = html`<button type="button" class="btn primary big" onClick=${() => run("rescueNext")} data-testid="btn-rescue-next">${g.round + 1 >= (g.kind === "beat" ? g.items.levels.length : g.items.length) ? "See the result" : "Next"}</button>`;
   if (g.kind === "beat") {
-    const level = g.items.levels[g.round];
+    const level = g.items.levels[g.round], names = [...new Set(level.flat().map((f) => f.name))];
     return html`<div class="rescue-game">
-      <p><b>Level ${g.round + 1} of ${g.items.levels.length}</b>${g.round === g.items.levels.length - 1 ? " (no names on screen)" : ""}: <span class="muted">${level.map((f) => f.name).join(", ")}</span></p>
-      ${g.status === "ready" && go(`Play level ${g.round + 1}`)}
+      <p><b>Level ${g.round + 1} of ${g.items.levels.length}, ${BEAT_LEVEL_NAMES[g.round]}</b>: <span class="muted">${names.join(", ")}. Five rounds, about 32 seconds; round 5 has no names.</span></p>
+      ${g.status === "ready" && go(`Play level ${g.round + 1} (${BEAT_LEVEL_NAMES[g.round]})`)}
       ${g.status === "playing" && html`${mark}<button type="button" class="btn ghost small" onClick=${() => run("rescueGo")} data-testid="btn-rescue-again">Play this level again</button>`}
       ${g.status === "marked" && next}
     </div>`;

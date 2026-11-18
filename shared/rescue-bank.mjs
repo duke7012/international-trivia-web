@@ -1,32 +1,53 @@
-// The question banks for the rescue games. Flags live in public/flags/{iso2}.svg (or .png) and
+// The question banks for the rescue games. Flags live in public/flags/{iso2}.png and
 // country outlines in server/rescue-outlines.mjs; scripts/fetch-rescue-assets.mjs rebuilds both
 // from this file.
 
 const c = (name, iso2, iso3) => ({ name, iso2, iso3 });
 
-// Say on the beat: each set is four levels of eight flags, easiest first, with names short enough
-// to say on a beat. Level 5 is drawn from the same set's flags and shows no names.
+// Say on the beat, in the style of the "say the word on beat" flag videos: three levels, each
+// five rounds of eight flags drawn from two or three look-alike countries with short names.
+// Each set is one rescue game: easy, medium, hard.
 export const BEAT_SETS = [
   { id: "a", levels: [
-    [c("Japan", "jp"), c("Brazil", "br"), c("Canada", "ca"), c("France", "fr"), c("Italy", "it"), c("China", "cn"), c("India", "in"), c("Mexico", "mx")],
-    [c("Spain", "es"), c("Germany", "de"), c("Greece", "gr"), c("Sweden", "se"), c("Turkey", "tr"), c("Egypt", "eg"), c("Chile", "cl"), c("Peru", "pe")],
-    [c("Ghana", "gh"), c("Nepal", "np"), c("Cuba", "cu"), c("Kenya", "ke"), c("Iran", "ir"), c("Laos", "la"), c("Togo", "tg"), c("Chad", "td")],
-    [c("Mali", "ml"), c("Oman", "om"), c("Fiji", "fj"), c("Iraq", "iq"), c("Benin", "bj"), c("Gabon", "ga"), c("Niger", "ne"), c("Yemen", "ye")],
+    [c("Japan", "jp"), c("Bangladesh", "bd"), c("Korea", "kr")],
+    [c("Ireland", "ie"), c("Italy", "it"), c("Ivory Coast", "ci")],
+    [c("Chad", "td"), c("Romania", "ro"), c("Andorra", "ad")],
   ] },
   { id: "b", levels: [
-    [c("USA", "us"), c("UK", "gb"), c("Korea", "kr"), c("Australia", "au"), c("Russia", "ru"), c("Argentina", "ar"), c("Vietnam", "vn"), c("Thailand", "th")],
-    [c("Norway", "no"), c("Finland", "fi"), c("Poland", "pl"), c("Ireland", "ie"), c("Israel", "il"), c("Morocco", "ma"), c("Jamaica", "jm"), c("Nigeria", "ng")],
-    [c("Austria", "at"), c("Denmark", "dk"), c("Hungary", "hu"), c("Belgium", "be"), c("Bolivia", "bo"), c("Panama", "pa"), c("Qatar", "qa"), c("Syria", "sy")],
-    [c("Malta", "mt"), c("Latvia", "lv"), c("Bhutan", "bt"), c("Tonga", "to"), c("Samoa", "ws"), c("Palau", "pw"), c("Nauru", "nr"), c("Haiti", "ht")],
+    [c("France", "fr"), c("Russia", "ru"), c("Netherlands", "nl")],
+    [c("Poland", "pl"), c("Monaco", "mc"), c("Indonesia", "id")],
+    [c("Senegal", "sn"), c("Mali", "ml"), c("Guinea", "gn")],
   ] },
   { id: "c", levels: [
-    [c("Portugal", "pt"), c("Switzerland", "ch"), c("Colombia", "co"), c("Philippines", "ph"), c("Indonesia", "id"), c("Pakistan", "pk"), c("Ukraine", "ua"), c("Singapore", "sg")],
-    [c("Ethiopia", "et"), c("Romania", "ro"), c("Croatia", "hr"), c("Serbia", "rs"), c("Lebanon", "lb"), c("Kuwait", "kw"), c("Uruguay", "uy"), c("Ecuador", "ec")],
-    [c("Estonia", "ee"), c("Rwanda", "rw"), c("Uganda", "ug"), c("Sudan", "sd"), c("Libya", "ly"), c("Jordan", "jo"), c("Angola", "ao"), c("Brunei", "bn")],
-    [c("Guyana", "gy"), c("Belize", "bz"), c("Malawi", "mw"), c("Zambia", "zm"), c("Lesotho", "ls"), c("Mongolia", "mn"), c("Eritrea", "er"), c("Djibouti", "dj")],
+    [c("China", "cn"), c("Vietnam", "vn"), c("Turkey", "tr")],
+    [c("Norway", "no"), c("Iceland", "is"), c("Denmark", "dk")],
+    [c("Colombia", "co"), c("Ecuador", "ec"), c("Venezuela", "ve")],
+  ] },
+  { id: "d", levels: [
+    [c("Germany", "de"), c("Belgium", "be"), c("Spain", "es")],
+    [c("Australia", "au"), c("New Zealand", "nz"), c("Fiji", "fj")],
+    [c("Slovenia", "si"), c("Slovakia", "sk"), c("Serbia", "rs")],
   ] },
 ];
-export const BEAT_BPM = [90, 100, 110, 120, 130];
+export const BEAT_LEVEL_NAMES = ["Easy", "Medium", "Hard"];
+export const BEAT_ROUNDS = 5;
+
+// The five rounds of one level, mixing more as they go: round 1 is seven of the first flag and one
+// of the second, the third look-alike joins in round 3, and round 5 shows no names.
+const MIX = [[7, 1, 0], [4, 4, 0], [3, 2, 3], [3, 3, 2], [3, 3, 2]];
+export function beatRounds(trio, random) {
+  return MIX.map(([a, b, cc], r) => {
+    const cells = [...Array(a).fill(trio[0]), ...Array(b).fill(trio[1]), ...Array(cc).fill(trio[2] || trio[1])];
+    for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+    return cells.map((f) => ({ name: f.name, iso2: f.iso2, ...(r === BEAT_ROUNDS - 1 && { hidden: true }) }));
+  });
+}
+
+// The music: the host's "Say on the beat music" sound, cut from the original flag video. Every
+// level is its own stretch of that one file: step 0 of level L sits at `levels[L]` seconds in.
+// Each round is 16 steps (8 to look, 8 to say on the beat); one step is an eighth note.
+export const BEAT_TRACK = { stepMs: 364.25, leadMs: 2000, levels: [3.101, 36.981, 70.860] };
+export const BEAT_STEPS = BEAT_ROUNDS * 16;
 
 // Guess the doodle: countries with shapes people know, by difficulty.
 // crop: [west, south, east, north] keeps only the part of a country people picture.
