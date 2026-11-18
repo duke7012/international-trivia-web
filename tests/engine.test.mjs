@@ -164,10 +164,12 @@ test("the team's score sets how many may return: 2 of 5 levels is 20%, the thres
   assert.equal(rescuePct("beat", 2, cfg), 20);
   assert.equal(rescuePct("beat", 4, cfg), 100);
   assert.equal(rescuePct("tower", 0, cfg), 0);
-  assert.equal(rescuePct("semantle", 899, cfg), 0);
-  assert.equal(rescuePct("semantle", 950, cfg), 20);
-  assert.equal(rescuePct("semantle", 995, cfg), 50);
+  assert.equal(rescuePct("semantle", 99, cfg), 0);
+  assert.equal(rescuePct("semantle", 450, cfg), 20, "every 100 closeness adds 5%");
+  assert.equal(rescuePct("semantle", 995, cfg), 45);
   assert.equal(rescuePct("semantle", 1000, cfg), 100);
+  assert.equal(rescueLadder("semantle", cfg).length, 10);
+  assert.equal(normalizeRescue({ semantle: { lowAt: 900, lowPct: 20 } }).semantle.every, 100, "an old two-step save falls back to the steps");
   assert.equal(rescueCount(20, 5), 1);
   assert.equal(rescueCount(10, 3), 1, "anything won brings back at least one");
   assert.equal(rescueCount(0, 5), 0);
