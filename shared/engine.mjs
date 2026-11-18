@@ -5,7 +5,7 @@
 // The rule this file exists to protect: flying, showing the question, starting the timer and
 // revealing the answer are four separate host actions. No action here performs two of them.
 
-import { TOTAL_STOPS, publishErrors, difficultyForStop, MAX_LEAD_MS, RESCUE_KINDS, rescueScore, rescuePct, rescueCount, semantlePuzzles } from "./schema.mjs";
+import { TOTAL_STOPS, publishErrors, difficultyForStop, MAX_LEAD_MS, RESCUE_KINDS, rescueScore, rescuePct, rescueCount, semantlePuzzles, showRules } from "./schema.mjs";
 import { BEAT_SETS, DOODLES, doodleMix } from "./rescue-bank.mjs";
 
 export class ShowError extends Error {}
@@ -33,6 +33,7 @@ export function newSession() {
     review: null, lastReview: null, topicBoard: null,
     rescue: null, rescueAttempts: 0, lastRescue: null, rescueUsed: { beat: [], doodle: [], semantle: [] },
     allOutAtStop: null, answerAt: 0,
+    rules: null, // { step, from, at }: the rules screen, open only before take-off
   };
 }
 
@@ -187,9 +188,23 @@ const handlers = {
   openTopicBoard(s, { contestantId }) {
     need(s, ["LOBBY", "READY_TO_FLY"], "A topic choice");
     if (contestantId) { if (byId(s, contestantId).status !== "active") fail("Only a contestant who is still in the game can choose the topic."); }
-    return { ...s, topicBoard: { contestantId: contestantId || null } };
+    return { ...s, topicBoard: { contestantId: contestantId || null }, rules: null };
   },
   closeTopicBoard(s) { return { ...s, topicBoard: null }; },
+
+  // ----- the rules screen (before take-off). from/at let every projector replay the same move. -----
+  showRules(s, _, ctx) {
+    need(s, ["LOBBY"], "The rules screen");
+    if (!showRules(ctx.settings).length) fail("Write the show rules in Settings first.");
+    return { ...s, rules: { step: 0, from: 0, at: ctx.now }, topicBoard: null };
+  },
+  rulesStep(s, { step }, ctx) {
+    if (!s.rules) fail("The rules are not on screen.");
+    const last = showRules(ctx.settings).length - 1;
+    const to = Math.max(0, Math.min(last, Math.round(Number(step) || 0)));
+    return to === s.rules.step ? s : { ...s, rules: { step: to, from: s.rules.step, at: ctx.now } };
+  },
+  hideRules(s) { return { ...s, rules: null }; },
 
   // ----- Step A: fly -----
   fly(s, { topic }, ctx) {
@@ -214,7 +229,7 @@ const handlers = {
       flight: { from: s.stop, to: stop, startedAt: ctx.now, durationMs: Math.round(ctx.settings.flightSeconds * 1000) },
       currentQuestionId: q.id, chosenTopic: topic ? q.topic : null,
       played: [...s.played, { stop, questionId: q.id, slot }],
-      shown: null, timer: null, media: idleMedia(), review: null, lastReview: null, topicBoard: null, lastRescue: null,
+      shown: null, timer: null, media: idleMedia(), review: null, lastReview: null, topicBoard: null, lastRescue: null, rules: null,
     };
   },
   // Landing, whether the animation ran or was skipped, only ever leads to the waiting card.

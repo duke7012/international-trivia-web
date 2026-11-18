@@ -133,6 +133,17 @@ function countryClash(q, others, publishedOnly) {
 
 export const answerText = (q) => (q.answerFormat === "choice" ? (q.correctChoice === null ? "" : q.choices[q.correctChoice]) : q.correctAnswer);
 
+export const DEFAULT_SHOW_RULES = [
+  "Everyone boards one flight to 30 destinations around the world.",
+  "At each destination, a question about that country appears.",
+  "When the timer starts, write your answer on your board.",
+  "When time is up, hold your board up. No changes after that.",
+  "A wrong or blank answer means you leave the flight.",
+  "If everyone is out, the whole room plays a rescue game to win passengers back.",
+  "Still on board at the last destination? You ring the Golden Bell!",
+].join("\n");
+export const MAX_SHOW_RULES = 8;
+
 export function defaultSettings() {
   return {
     showTitle: "Golden Bell: Around the World",
@@ -144,6 +155,7 @@ export function defaultSettings() {
     matchDifficulty: true,
     easyUntil: 10, // stops 1..easyUntil are easy
     mediumUntil: 20, // then medium up to here, hard after
+    rules: DEFAULT_SHOW_RULES, // the rules screen before take-off, one rule per line
   };
 }
 
@@ -160,6 +172,7 @@ export function normalizeSettings(s = {}) {
     matchDifficulty: s.matchDifficulty !== false,
     easyUntil,
     mediumUntil: Math.round(num(s.mediumUntil, easyUntil, TOTAL_STOPS, Math.max(easyUntil, d.mediumUntil))),
+    rules: typeof s.rules === "string" ? str(s.rules, 2000).trim() : d.rules,
   };
 }
 
@@ -298,3 +311,4 @@ export function rescueInfo(kind, cfg) {
 
 // The rules as the projector lists them: one per non-empty line.
 export const ruleLines = (text) => String(text || "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 12);
+export const showRules = (settings) => ruleLines(settings.rules).slice(0, MAX_SHOW_RULES);

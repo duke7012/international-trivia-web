@@ -39,6 +39,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); 
 .card { position: absolute; left: 9em; bottom: 6em; background: rgba(255, 250, 240, .92); -webkit-backdrop-filter: blur(1.2em); backdrop-filter: blur(1.2em); border-radius: 2.2em; padding: 2.2em 3em 2.4em; animation: card-in .7s var(--spring) both; max-width: 62em; }
 @keyframes card-in { from { transform: translateY(6em) rotate(-2deg); opacity: 0; } to { transform: none; opacity: 1; } }
 .card-kicker { font-size: 1.6em; font-weight: 600; color: var(--ink-2); }
+
+/* The rules screen: one rule card at a time, flying in while the plane tours the route. */
+.rules-screen { position: absolute; inset: 0; pointer-events: none; }
+.rule-card { position: absolute; left: 7em; top: 50%; width: 52em; transform-origin: 0 50%; background: rgba(255, 250, 240, .93); -webkit-backdrop-filter: blur(1.2em); backdrop-filter: blur(1.2em); border-radius: 2.4em; padding: 2.6em 3.2em 3em; box-shadow: 0 2.4em 5em rgba(10, 20, 60, .28); animation: rule-in .9s .35s var(--spring) both; }
+.rule-card h2 { font-size: 5.4em; font-weight: 800; letter-spacing: -.045em; line-height: 1.02; margin-top: .14em; text-wrap: balance; }
+@keyframes rule-in { from { opacity: 0; transform: translateY(-50%) perspective(60em) rotateY(38deg) translateX(-12em) scale(.88); } to { opacity: 1; transform: translateY(-50%); } }
+.rule-dots { position: absolute; left: 7em; bottom: 6em; display: flex; gap: 1.1em; list-style: none; margin: 0; padding: 0; }
+.rule-dots li { width: 1.3em; height: 1.3em; border-radius: 50%; background: rgba(255, 250, 240, .45); box-shadow: 0 .2em .6em rgba(10, 20, 60, .25); transition: transform .4s, background .4s; }
+.rule-dots li.done { background: rgba(255, 250, 240, .9); }
+.rule-dots li.on { background: var(--gold, #f2b31b); transform: scale(1.45); }
 .card h2 { font-size: 5em; font-weight: 800; letter-spacing: -.045em; line-height: .98; margin-top: .12em; text-wrap: balance; }
 .card .sub { font-size: 1.9em; margin-top: .7em; color: var(--ink-2); }
 .card .names { font-size: 2em; font-weight: 600; margin-top: .6em; line-height: 1.2; }

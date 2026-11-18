@@ -451,3 +451,16 @@ test("which sound plays when", () => {
   assert.equal(planAudio(v({ phase: "LOBBY", preview: { kind: "question" } }), 0), null);
   assert.deepEqual(cueNames(planAudio(v({ phase: "LOBBY", preview: { kind: "flight", startedAt: 0, durationMs: 9000 } }), 100)), ["flight"]);
 });
+
+test("the rules screen steps before take-off and closes when the plane flies", () => {
+  const ctx = makeCtx();
+  let s = run(roster(ctx, "Ana"), ctx, "showRules");
+  assert.deepEqual([s.rules.step, s.rules.from], [0, 0]);
+  s = run(s, ctx, ["rulesStep", { step: 2 }]);
+  assert.deepEqual([s.rules.step, s.rules.from], [2, 0], "remembers where it came from, for the camera move");
+  s = run(s, ctx, ["rulesStep", { step: 99 }]);
+  assert.equal(s.rules.step, 6, "clamped to the last of the 7 default rules");
+  s = run(s, ctx, "fly");
+  assert.equal(s.rules, null);
+  assert.throws(() => run(s, ctx, "showRules"), ShowError, "only on the start screen");
+});

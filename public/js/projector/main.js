@@ -36,6 +36,7 @@ function sounds(prev, v) {
   if (to("ALL_ELIMINATED") && prev.phase !== "RESCUE") play.mayday();
   if (to("FINISHED") && !own("finale")) play.goldenBell();
   if (v.lastRescue && !prev.lastRescue) play.fanfare();
+  if (v.rules && v.rules.at !== prev.rules?.at) { if (v.rules.step > (prev.rules?.step ?? 0)) play.takeoff(); else play.card(); }
   if (v.preview?.kind === "flight" && prev.preview?.kind !== "flight" && !own("flight")) play.takeoff();
   // A new rescue game: the built-in alarm, unless the host has their own music for it.
   if (v.rescue && prev.rescue?.attempt !== v.rescue.attempt && !own("rescueGame")) play.mayday();
@@ -55,12 +56,22 @@ function sounds(prev, v) {
   }
 }
 
+// The rules screen tours the route: rule i of n sits at its own stop, home airport to the Golden Bell.
+const RULE_HOP_MS = 3200;
+const ruleStop = (i, n) => Math.round((i * STOPS) / Math.max(1, n - 1));
+
 function sceneFor(v) {
+  if (v.rules && !v.preview) {
+    const { step, from, at, lines } = v.rules, n = lines.length;
+    // forward: fly the leg; back: cut straight there
+    const flight = step > from ? { from: ruleStop(from, n), to: ruleStop(step, n), startedAt: at, durationMs: RULE_HOP_MS } : null;
+    return { mode: "rules", stop: ruleStop(step, n), flight, next: null, bell: step === n - 1 };
+  }
   const pf = v.preview?.kind === "flight" ? v.preview : null;
   const flight = pf || v.flight;
   const stop = pf ? pf.to : v.stop;
   const mode = pf ? "waiting" : v.phase === "LOBBY" ? "lobby" : ["ALL_ELIMINATED", "RESCUE"].includes(v.phase) ? "emergency" : v.phase === "FINISHED" ? "finale" : "waiting";
-  return { mode, stop, flight, next: flight ? flight.to : stop + 1 };
+  return { mode, stop, flight, next: flight ? flight.to : stop + 1, bell: false };
 }
 
 // ---------- pieces of the screen ----------
@@ -102,6 +113,17 @@ function Lobby({ v }) {
   return html`<section class="lobby" data-testid="lobby">
     <h1>${v.title.split(":")[0]}${v.title.includes(":") && html`<span>${v.title.split(":").slice(1).join(":").trim()}</span>`}</h1>
     <p>Thirty destinations. One Golden Bell. Boarding now.</p>
+  </section>`;
+}
+
+function Rules({ v }) {
+  const { step, lines } = v.rules;
+  return html`<section class="rules-screen" data-testid="rules-screen">
+    <div class="rule-card" key=${step} data-testid="rule-card">
+      <p class="card-kicker">Rule ${step + 1} of ${lines.length}</p>
+      <h2>${lines[step]}</h2>
+    </div>
+    <ol class="rule-dots" aria-hidden="true">${lines.map((_, i) => html`<li class=${i === step ? "on" : i < step ? "done" : ""}></li>`)}</ol>
   </section>`;
 }
 
@@ -258,12 +280,12 @@ function Screen({ v, status, armed, onArm }) {
     const t = setTimeout(() => redraw((n) => n + 1), Math.max(0, v.answerAt - clock.now()) + 20);
     return () => clearTimeout(t);
   }, [v.answerAt, !!v.answer, shown]);
-  const quiet = !!v.question || !!pq || ["ALL_ELIMINATED", "RESCUE", "FINISHED"].includes(v.phase);
+  const quiet = !!v.question || !!pq || !!v.rules || ["ALL_ELIMINATED", "RESCUE", "FINISHED"].includes(v.phase);
 
   let body = null;
   if (pq) body = html`<div class="veil"></div><${QuestionCard} key="preview" typing q=${pq.question} number=${pq.number} answer=${pq.answer} phase=${pq.answer ? "ANSWER_REVEALED" : "QUESTION_VISIBLE"} timer=${{ idle: true, durationMs: pq.question.countdown * 1000 }} mstate=${pq.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} />`;
   else if (pf) body = flying ? html`<${Flying} to=${Math.min(pf.to, Math.floor(at) + 1)} preview=${true} />` : html`<${Waiting} v=${{ ...v, stop: pf.to, chosenTopic: null }} />`;
-  else if (v.phase === "LOBBY") body = v.topicBoard ? html`<${TopicBoard} v=${v} />` : html`<${Lobby} v=${v} />`;
+  else if (v.phase === "LOBBY") body = v.topicBoard ? html`<${TopicBoard} v=${v} />` : v.rules ? html`<${Rules} v=${v} />` : html`<${Lobby} v=${v} />`;
   else if (v.phase === "FLIGHT_ANIMATING") body = html`<${Flying} to=${v.flight.to} />`;
   else if (v.phase === "DESTINATION_ARRIVED") body = html`<${Waiting} v=${v} />`;
   else if (v.question) body = html`<div class="veil"></div><${QuestionCard} key=${"q" + v.stop} typing q=${v.question} number=${v.stop} phase=${v.answer && !shown ? "BOARDS_UP" : v.phase} answer=${shown ? v.answer : null} timer=${v.timer} mstate=${v.media} silent=${MONITOR || !armed} onEnded=${mediaEnded} onSecond=${onSecond} />

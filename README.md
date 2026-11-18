@@ -139,6 +139,10 @@ Useful extras on the dashboard: hide the question again, pause or reset the time
 early, and play, pause, replay or mute a video or audio clip. Playing a clip, or a clip ending,
 never starts the countdown.
 
+Before take-off, **Show the rules** puts the show rules on the projector one card at a time:
+each **Next rule** flies the plane further along the route, ending on the Golden Bell. Edit the
+rules in **Settings** (one per line, up to 8). The rules close when the first flight leaves.
+
 A video question opens with only the video and "Watch the following video". When the host
 presses **Stop and show the question**, or the video finishes, the question writes itself out
 and the video keeps looping, muted, beside it. **Watch again** goes back to the full video.

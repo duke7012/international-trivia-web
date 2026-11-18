@@ -2,7 +2,7 @@
 // The host sees everything. The projector is sent a question only once the host has shown it,
 // and an answer only once the host has revealed it, so a refresh (or a curious look in the
 // browser's developer tools) can never expose anything early.
-import { TOTAL_STOPS, answerText, youtubeId, publishErrors, draftWarnings, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount } from "../shared/schema.mjs";
+import { TOTAL_STOPS, answerText, youtubeId, publishErrors, draftWarnings, rescueInfo, rescueLadder, rescueScore, rescuePct, rescueCount, showRules } from "../shared/schema.mjs";
 import { QUESTION_PHASES, ANSWER_PHASES, active, eliminated, nextFixed, topicOptions, rounds } from "../shared/engine.mjs";
 import { BEAT_BPM, semantleUrl } from "../shared/rescue-bank.mjs";
 import OUTLINES from "./rescue-outlines.mjs";
@@ -61,7 +61,7 @@ export function projectorView(ws, preview, now, sounds = {}) {
     answerAt: 0,
     chosenTopic: s.stop > 0 ? s.chosenTopic : null,
     question: null, answer: null, timer: null, media: null,
-    lastReview: null, topicBoard: null, rescue: null, lastRescue: null, finale: null, preview: null,
+    lastReview: null, topicBoard: null, rescue: null, lastRescue: null, finale: null, preview: null, rules: null,
   };
   if (QUESTION_PHASES.includes(s.phase) && s.shown) {
     v.question = stageQuestion(s.shown.question, st);
@@ -78,6 +78,7 @@ export function projectorView(ws, preview, now, sounds = {}) {
   }
   if (s.lastRescue && s.phase === "READY_TO_FLY") v.lastRescue = { count: s.lastRescue.returnedIds.length, names: names(s.lastRescue.returnedIds), via: s.lastRescue.via };
   if (s.phase === "RESCUE" && s.rescue) v.rescue = stageRescue(s.rescue, ws.rescue, eliminated(s).length);
+  if (s.rules && s.phase === "LOBBY") v.rules = { ...s.rules, lines: showRules(st) };
   if (s.phase === "FINISHED") v.finale = { winners: names(active(s).map((c) => c.id)), count: active(s).length, stop: s.stop };
   if (preview) {
     v.preview = preview.kind === "flight"

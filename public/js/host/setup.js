@@ -3,7 +3,7 @@
 // starts from that set's saved values.
 import { html, useRef, useState } from "/vendor/preact/htm-preact.module.js";
 import { upload, plural } from "../net.js";
-import { EMERGENCY_RULES, SOUND_CUES, cueForFile, ruleLines, rescueLadder, semantlePuzzles } from "/shared/schema.mjs";
+import { EMERGENCY_RULES, MAX_SHOW_RULES, SOUND_CUES, cueForFile, ruleLines, rescueLadder, semantlePuzzles } from "/shared/schema.mjs";
 import { BEAT_SETS, DOODLES } from "/shared/rescue-bank.mjs";
 import { run, say, Field } from "./ui.js";
 
@@ -147,6 +147,7 @@ export function SettingsTab({ view }) {
         <${Field} label=${`Projector volume ${Math.round(st.volume * 100)}%`}><input type="range" min="0" max="1" step="0.05" value=${st.volume} onInput=${(e) => set({ volume: Number(e.target.value) })} /><//>
         <label class="check"><input type="checkbox" checked=${st.showNames} onChange=${(e) => set({ showNames: e.target.checked })} /> Show contestant names on the projector</label>
       </div>
+      <${Field} label="Show rules" hint=${`One rule per line, up to ${MAX_SHOW_RULES}. Shown one at a time with Show the rules, before take-off.`} wide><textarea rows="7" value=${st.rules} onInput=${(e) => set({ rules: e.target.value })} data-testid="set-rules"></textarea><//>
     </section>
 
     <${SoundsPanel} view=${view} />
